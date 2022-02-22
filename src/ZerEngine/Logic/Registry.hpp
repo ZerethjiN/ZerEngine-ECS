@@ -15,7 +15,6 @@
 #include <map>
 #include <vector>
 #include <queue>
-#include <any>
 #include <memory>
 #include "Query.hpp"
 #include "TypeUtilities.hpp"
