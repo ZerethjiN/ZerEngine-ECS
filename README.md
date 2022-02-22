@@ -1,5 +1,5 @@
 # ZerEngine-ECS
-![Logo](https://github.com/ZerethjiN/ZerEngine-ECS/blob/main/LogoZerEngineBlanc.png=512x512)
+![Logo](https://github.com/ZerethjiN/ZerEngine-ECS/blob/main/LogoZerEngineBlanc.png)
 
 A simple ECS logic core.
 
