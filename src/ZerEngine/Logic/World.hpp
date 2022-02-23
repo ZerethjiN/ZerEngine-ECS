@@ -41,6 +41,11 @@ namespace zre {
             return res.get<T>();
         }
 
+        template <typename T>
+        [[nodiscard]] constexpr bool contains(const Ent id) const noexcept {
+            return reg.contains<T>(id);
+        }
+
         /**
          * @brief Get a component by its entity and type.
          * 
@@ -106,7 +111,7 @@ namespace zre {
          * @param args 
          */
         template <typename T, typename... Args>
-        constexpr void add(Ent id, Args&&... args) const noexcept {
+        constexpr void add(Ent id, Args&&... args) noexcept {
             reg.add<T>(id, std::forward<Args>(args)...);
         }
 
@@ -117,7 +122,7 @@ namespace zre {
          * @param ent 
          */
         template <typename T>
-        constexpr void del(Ent ent) const noexcept {
+        constexpr void del(Ent ent) noexcept {
             reg.del<T>(ent);
         }
 
@@ -131,7 +136,7 @@ namespace zre {
          * @param args 
          */
         template <typename T1, typename T2, typename... Args>
-        constexpr void rep(Ent ent, Args&&... args) const noexcept {
+        constexpr void rep(const Ent ent, Args&&... args) noexcept {
             reg.del<T1>(ent);
             reg.add<T2>(ent, std::forward<Args>(args)...);
         }

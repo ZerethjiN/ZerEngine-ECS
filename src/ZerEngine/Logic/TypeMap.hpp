@@ -38,9 +38,9 @@ namespace zre {
          */
         template <typename T>
         constexpr void add(T&& t) noexcept {
-            typeMap.emplace(
+            typeMap.try_emplace(
                 typeid(T).hash_code(),
-                std::forward<T>(t)
+                std::make_any<T>(std::forward<T>(t))
             );
         }
 

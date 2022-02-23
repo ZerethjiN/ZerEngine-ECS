@@ -37,11 +37,12 @@ namespace zre {
              * @param args Arguments needed to construct the New Component.
              */
             template <typename... Args>
-            void add(Ent id, Args&&... args) noexcept {
+            void add(const Ent id, Args&&... args) noexcept {
                 packedComp.emplace_back(T{std::forward<Args>(args)...});
                 entIndex.emplace(id, packedComp.size() - 1);
                 indexEnt.emplace(packedComp.size() - 1, id);
                 packedEnts.emplace_back(id);
+                sort(packedEnts.begin(), packedEnts.end());
             }
 
             /**
@@ -67,6 +68,7 @@ namespace zre {
                         packedEnts.erase(packedEnts.begin() + static_cast<long long int>(i));
                     }
                 }
+                sort(packedEnts.begin(), packedEnts.end());
             }
 
             /**

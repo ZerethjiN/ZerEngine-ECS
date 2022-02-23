@@ -32,11 +32,11 @@ namespace zre {
          * 
          * @tparam T 
          * @param t 
-         * @return constexpr ZerEngine& 
+         * @return
          */
         template <typename T>
         constexpr ZerEngine& addRes(T&& t) noexcept {
-            world.res.add(std::move(t));
+            world.res.add(std::forward<T>(t));
             return *this;
         }
 

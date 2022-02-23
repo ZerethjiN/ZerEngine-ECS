@@ -70,8 +70,8 @@ namespace zre {
              * @param args Arguments to generate the new Component.
              */
             template <typename T, typename... Args>
-            constexpr void add(Ent id, Args&&... args) {
-                entComps[id].push_back(typeid(T).hash_code());
+            constexpr void add(const Ent id, Args&&... args) {
+                entComps.at(id).push_back(typeid(T).hash_code());
                 assure<T>().add(id, std::forward<Args>(args)...);
             }
 
@@ -82,8 +82,21 @@ namespace zre {
              * @param id 
              */
             template <typename T>
-            constexpr void del(Ent id) noexcept {
+            constexpr void del(const Ent id) noexcept {
                 assure<T>().del(id);
+            }
+
+            template <typename T>
+            [[nodiscard]] constexpr bool contains(const Ent id) const noexcept {
+                const Type type = typeid(T).hash_code();
+
+                for (auto& entType: entComps.at(id)) {
+                    if (entType == type) {
+                        return true;
+                    }
+                }
+
+                return false;
             }
 
             /**
