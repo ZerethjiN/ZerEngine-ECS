@@ -13,7 +13,7 @@
 #define ZERENGINE_COMP_POOL_HPP
 
 #include <vector>
-#include <map>
+#include <unordered_map>
 #include <algorithm>
 #include "TypeUtilities.hpp"
 
@@ -95,14 +95,8 @@ namespace zre {
              * @param id The Entity Id.
              * @return The Component.
              */
-            [[nodiscard]] T& get(Ent id) {
-                try {
-                    return packedComp.at(entIndex.at(id));
-                }
-
-                catch (const std::exception& e) {
-                    throw e;
-                }
+            [[nodiscard]] constexpr T& get(Ent id) {
+                return packedComp.at(entIndex.at(id));
             }
 
             /**
@@ -111,20 +105,14 @@ namespace zre {
              * @param id The Entity Id.
              * @return The Component.
              */
-            [[nodiscard]] const T& get(Ent id) const {
-                try {
-                    return packedComp.at(entIndex.at(id));
-                }
-
-                catch (const std::exception& e) {
-                    throw e;
-                }
+            [[nodiscard]] constexpr const T& get(Ent id) const {
+                return packedComp.at(entIndex.at(id));
             }
 
         private:
             std::vector<T> packedComp; // Packaged components.
-            std::map<Ent, uint32_t> entIndex; // Relation between Entity and PackedComp Index.
-            std::map<uint32_t, Ent> indexEnt; // Relation between PackedComp Index and Entity.
+            std::unordered_map<Ent, uint32_t> entIndex; // Relation between Entity and PackedComp Index.
+            std::unordered_map<uint32_t, Ent> indexEnt; // Relation between PackedComp Index and Entity.
             std::vector<Ent> packedEnts; // List of all Entities connect to this Pool.
         };
     }

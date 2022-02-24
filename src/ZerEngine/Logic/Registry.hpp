@@ -12,7 +12,7 @@
 #ifndef ZERENGINE_REGISTRY_HPP
 #define ZERENGINE_REGISTRY_HPP
 
-#include <map>
+#include <unordered_map>
 #include <vector>
 #include <queue>
 #include <memory>
@@ -170,8 +170,8 @@ namespace zre {
             }
 
         private:
-            std::map<Type, std::shared_ptr<ICompPool>> compPools;
-            std::map<Ent, std::vector<Type>> entComps;
+            std::unordered_map<Type, std::shared_ptr<ICompPool>> compPools;
+            std::unordered_map<Ent, std::vector<Type>> entComps;
             std::queue<Ent> entTokens;
 
             static inline Ent NB_ENTITY = 0;

@@ -79,7 +79,7 @@ namespace zre {
         }
 
     private:
-        static inline zre::World world;
+        zre::World world;
     };
 }
 

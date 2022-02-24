@@ -49,47 +49,35 @@ namespace zre {
         }
 
         template <typename Func>
-        void each(const Func& func) const {
-            for ([[maybe_unused]] auto ent: ents) {
-                try {
-                    if constexpr (std::is_invocable<Func, Ent, Comp&, Comps&...>::value) {
-                        std::apply(func, std::tuple_cat(std::make_tuple(ent), genTuple<std::tuple<>, decltype(pools)>(ent, std::tuple<>())));
-                    }
-
-                    else if constexpr (std::is_invocable<Func, Comp&, Comps&...>::value) {
-                        std::apply(func, genTuple<std::tuple<>, decltype(pools)>(ent, std::tuple<>()));
-                    }
-
-                    else if constexpr (std::is_invocable<Func, Ent>::value) {
-                        std::apply(func, std::make_tuple(ent));
-                    }
-
-                    else {
-                        func();
-                    }
+        constexpr void each(const Func& func) const {
+            for ([[maybe_unused]] const auto ent: ents) {
+                if constexpr (std::is_invocable<Func, Ent, Comp&, Comps&...>::value) {
+                    std::apply(func, std::tuple_cat(std::make_tuple(ent), genTuple<std::tuple<>, decltype(pools)>(ent, std::tuple<>())));
                 }
 
-                catch (const std::exception& e) {
-                    continue;
+                else if constexpr (std::is_invocable<Func, Comp&, Comps&...>::value) {
+                    std::apply(func, genTuple<std::tuple<>, decltype(pools)>(ent, std::tuple<>()));
+                }
+
+                else if constexpr (std::is_invocable<Func, Ent>::value) {
+                    std::apply(func, std::make_tuple(ent));
+                }
+
+                else {
+                    func();
                 }
             }
         }
 
     private:
         template <typename Tup, typename Pools, size_t Index = 0>
-        [[nodiscard]] const decltype(auto) genTuple(Ent ent, Tup tup) const noexcept(false) {
-            try {
-                auto newTup = std::tuple_cat(tup, std::make_tuple(std::ref(std::get<Index>(pools).get(ent))));
+        [[nodiscard]] constexpr const decltype(auto) genTuple(Ent ent, Tup tup) const noexcept(false) {
+            auto newTup = std::tuple_cat(tup, std::make_tuple(std::ref(std::get<Index>(pools).get(ent))));
 
-                if constexpr (Index < std::tuple_size<Pools>::value - 1)
-                    return genTuple<decltype(newTup), Pools, Index + 1>(ent, newTup);
-                else
-                    return newTup;
-            }
-
-            catch (const std::exception& e) {
-                throw e;
-            }
+            if constexpr (Index < std::tuple_size<Pools>::value - 1)
+                return genTuple<decltype(newTup), Pools, Index + 1>(ent, newTup);
+            else
+                return newTup;
         }
 
         template <typename Pool>
@@ -112,27 +100,27 @@ namespace zre {
         }
 
         constexpr void intersectWith(const std::vector<Ent>& other) noexcept {
-            std::vector<Ent> newEnts;
+            std::vector<Ent> tmpEnts;
             std::set_intersection(
                 ents.begin(), ents.end(),
                 other.begin(), other.end(),
-                std::back_inserter(newEnts)
+                std::back_inserter(tmpEnts)
             );
-            ents = newEnts;
+            ents.swap(tmpEnts);
         }
 
         constexpr void differenceWith(const std::vector<Ent>& other) noexcept {
-            std::vector<Ent> newEnts;
+            std::vector<Ent> tmpEnts;
             std::set_difference(
                 ents.begin(), ents.end(),
                 other.begin(), other.end(),
-                std::back_inserter(newEnts)
+                std::back_inserter(tmpEnts)
             );
-            ents = newEnts;
+            ents.swap(tmpEnts);
         }
 
     private:
-        std::tuple<priv::CompPool<Comp>&, priv::CompPool<Comps>&...> pools;
+        const std::tuple<priv::CompPool<Comp>&, priv::CompPool<Comps>&...> pools;
         std::vector<Ent> ents;
     };
 }

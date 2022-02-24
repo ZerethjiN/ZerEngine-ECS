@@ -12,7 +12,7 @@
 #ifndef ZERENGINE_RESSOURCE_HPP
 #define ZERENGINE_RESSOURCE_HPP
 
-#include <map>
+#include <unordered_map>
 #include <any>
 
 namespace zre {
@@ -67,7 +67,7 @@ namespace zre {
         }
 
     private:
-        std::map<size_t, std::any> typeMap;
+        std::unordered_map<size_t, std::any> typeMap;
     };
 }
 
