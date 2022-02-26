@@ -132,13 +132,14 @@ namespace zre {
              * @tparam Excludes 
              * @return New Query generated.
              */
-            template <typename Comp, typename... Comps, typename... Filters, typename... Excludes>
-            [[nodiscard]] constexpr const Query<Comp, comp_t<Comps...>, With<Filters...>, Without<Excludes...>> query(comp_t<Comps...> = {}, With<Filters...> = {}, Without<Excludes...> = {}) noexcept {
+            template <typename Comp, typename... Comps, typename... Filters, typename... Excludes, typename... Optionnals>
+            [[nodiscard]] constexpr const Query<Comp, comp_t<Comps...>, With<Filters...>, Without<Excludes...>, OrWith<Optionnals...>> query(comp_t<Comps...> = {}, With<Filters...> = {}, Without<Excludes...> = {}, OrWith<Optionnals...> = {}) noexcept {
                 return {
                     assure<Comp>(),
                     assure<Comps>()...,
                     assure<Filters>()...,
-                    assure<Excludes>()...
+                    assure<Excludes>()...,
+                    assure<Optionnals>()...
                 };
             }
 

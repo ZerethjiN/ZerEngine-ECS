@@ -81,9 +81,9 @@ namespace zre {
          * @param exclude 
          * @return constexpr const Query<Comp, priv::comp_t<Comps...>, priv::With<Filters...>, priv::Without<Excludes...>> 
          */
-        template <typename Comp, typename... Comps, typename... Filters, typename... Excludes>
-        [[nodiscard]] constexpr const Query<Comp, priv::comp_t<Comps...>, priv::With<Filters...>, priv::Without<Excludes...>> query(priv::With<Filters...> filter = {}, priv::Without<Excludes...> exclude = {}) noexcept {
-            return reg.query<Comp>(priv::comp_t<Comps...>(), filter, exclude);
+        template <typename Comp, typename... Comps, typename... Filters, typename... Excludes, typename... Optionnals>
+        [[nodiscard]] constexpr const Query<Comp, priv::comp_t<Comps...>, priv::With<Filters...>, priv::Without<Excludes...>, priv::OrWith<Optionnals...>> query(priv::With<Filters...> filter = {}, priv::Without<Excludes...> exclude = {}, priv::OrWith<Optionnals...> option = {}) noexcept {
+            return reg.query<Comp>(priv::comp_t<Comps...>(), filter, exclude, option);
         }
 
         /**
@@ -97,9 +97,25 @@ namespace zre {
          * @param filter 
          * @return constexpr const Query<Comp, priv::comp_t<Comps...>, priv::With<Filters...>, priv::Without<Excludes...>> 
          */
-        template <typename Comp, typename... Comps, typename... Filters, typename... Excludes>
-        [[nodiscard]] constexpr const Query<Comp, priv::comp_t<Comps...>, priv::With<Filters...>, priv::Without<Excludes...>> query(priv::Without<Excludes...> exclude, priv::With<Filters...> filter = {}) noexcept {
-            return reg.query<Comp>(priv::comp_t<Comps...>(), filter, exclude);
+        template <typename Comp, typename... Comps, typename... Filters, typename... Excludes, typename... Optionnals>
+        [[nodiscard]] constexpr const Query<Comp, priv::comp_t<Comps...>, priv::With<Filters...>, priv::Without<Excludes...>, priv::OrWith<Optionnals...>> query(priv::Without<Excludes...> exclude, priv::With<Filters...> filter = {}, priv::OrWith<Optionnals...> option = {}) noexcept {
+            return reg.query<Comp>(priv::comp_t<Comps...>(), filter, exclude, option);
+        }
+
+        /**
+         * @brief Get a new Query per necessary Component, Filter and Exclusion Type.
+         * 
+         * @tparam Comp 
+         * @tparam Comps 
+         * @tparam Filters 
+         * @tparam Excludes 
+         * @param exclude 
+         * @param filter 
+         * @return constexpr const Query<Comp, priv::comp_t<Comps...>, priv::With<Filters...>, priv::Without<Excludes...>> 
+         */
+        template <typename Comp, typename... Comps, typename... Filters, typename... Excludes, typename... Optionnals>
+        [[nodiscard]] constexpr const Query<Comp, priv::comp_t<Comps...>, priv::With<Filters...>, priv::Without<Excludes...>, priv::OrWith<Optionnals...>> query(priv::OrWith<Optionnals...> option, priv::Without<Excludes...> exclude = {}, priv::With<Filters...> filter = {}) noexcept {
+            return reg.query<Comp>(priv::comp_t<Comps...>(), filter, exclude, option);
         }
 
         /**

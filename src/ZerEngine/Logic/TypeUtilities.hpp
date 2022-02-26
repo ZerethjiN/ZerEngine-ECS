@@ -27,6 +27,11 @@ namespace zre {
             constexpr static auto size = sizeof...(Filters);
         };
 
+        template <typename... Optionnals>
+        struct OrWith {
+            constexpr static auto size = sizeof...(Optionnals);
+        };
+
         template <typename... Comps>
         struct comp_t {
             constexpr static auto size = sizeof...(Comps);
@@ -38,6 +43,9 @@ namespace zre {
 
     template <typename... Filters>
     constexpr priv::With<Filters...> with;
+
+    template <typename... Optionnals>
+    constexpr priv::OrWith<Optionnals...> orWith;
 
     using Type = size_t;
 
