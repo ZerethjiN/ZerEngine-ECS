@@ -84,6 +84,16 @@ namespace zre {
             template <typename T>
             constexpr void del(const Ent id) noexcept {
                 assure<T>().del(id);
+
+                const Type type = typeid(T).hash_code();
+
+                auto& entType = entComps.at(id);
+                for (size_t i = 0; i < entType.size(); i++) {
+                    if (entType.at(i) == type) {
+                        entType.erase(entType.begin() + i);
+                        return;
+                    }
+                }
             }
 
             template <typename T>
