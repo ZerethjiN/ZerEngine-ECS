@@ -60,7 +60,7 @@ void stopRunSys(zre::World& world) {
 int main() {
     // Our application.
     zre::ZerEngine()
-        .addRes(FakeTime())
+        .addRes<FakeTime>()
         .addStartSys(initPos)
         .addSys(movePosSys)
         .addSys(stopRunSys)
