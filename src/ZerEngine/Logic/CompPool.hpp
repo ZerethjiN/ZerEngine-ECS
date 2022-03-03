@@ -52,7 +52,7 @@ namespace zre {
              */
             void del(Ent id) noexcept {
                 auto posRemoveInfo = entIndex[id];
-                auto posLastInfo = static_cast<uint32_t>(packedComp.size() - 1);
+                auto posLastInfo = packedComp.size() > 0 ? static_cast<uint32_t>(packedComp.size() - 1) : 0;
                 packedComp[posRemoveInfo] = packedComp[posLastInfo];
 
                 auto entLastInfo = indexEnt[posLastInfo];
@@ -68,6 +68,7 @@ namespace zre {
                         packedEnts.erase(packedEnts.begin() + static_cast<long long int>(i));
                     }
                 }
+
                 sort(packedEnts.begin(), packedEnts.end());
             }
 

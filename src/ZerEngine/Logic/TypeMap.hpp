@@ -44,6 +44,14 @@ namespace zre {
             );
         }
 
+        template <typename T, typename... Args>
+        constexpr void emplace(Args&&... args) noexcept {
+            typeMap.try_emplace(
+                typeid(T).hash_code(),
+                std::make_any<T>(std::forward<Args>(args)...)
+            );
+        }
+
         /**
          * @brief Get an Object by its Type.
          * 

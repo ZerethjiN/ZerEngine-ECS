@@ -34,9 +34,9 @@ namespace zre {
          * @param t 
          * @return
          */
-        template <typename T>
-        constexpr ZerEngine& addRes(T&& t) noexcept {
-            world.res.add(std::forward<T>(t));
+        template <typename T, typename... Args>
+        constexpr ZerEngine& addRes(Args&&... args) noexcept {
+            world.res.emplace<T>(std::forward<Args>(args)...);
             return *this;
         }
 

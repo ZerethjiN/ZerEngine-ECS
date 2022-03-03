@@ -119,6 +119,22 @@ namespace zre {
         }
 
         /**
+         * @brief Get a new Query per necessary Component, Filter and Exclusion Type.
+         * 
+         * @tparam Comp 
+         * @tparam Comps 
+         * @tparam Filters 
+         * @tparam Excludes 
+         * @param exclude 
+         * @param filter 
+         * @return constexpr const Query<Comp, priv::comp_t<Comps...>, priv::With<Filters...>, priv::Without<Excludes...>> 
+         */
+        template <typename Comp, typename... Comps, typename... Filters, typename... Excludes, typename... Optionnals>
+        [[nodiscard]] constexpr const Query<Comp, priv::comp_t<Comps...>, priv::With<Filters...>, priv::Without<Excludes...>, priv::OrWith<Optionnals...>> query(priv::OrWith<Optionnals...> option, priv::With<Filters...> filter, priv::Without<Excludes...> exclude = {}) noexcept {
+            return reg.query<Comp>(priv::comp_t<Comps...>(), filter, exclude, option);
+        }
+
+        /**
          * @brief Add a new Component to an Entity bases on its Component Type and Entity Id.
          * 
          * @tparam T 
