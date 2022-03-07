@@ -51,7 +51,7 @@ namespace zre {
         }
 
         template <typename Func>
-        constexpr void each(const Func& func) const {
+        constexpr void each(const Func& func) const noexcept {
             for ([[maybe_unused]] const auto ent: ents) {
                 if constexpr (std::is_invocable<Func, Ent, Comp&, Comps&...>::value) {
                     std::apply(func, std::tuple_cat(std::make_tuple(ent), genTuple<std::tuple<>, decltype(pools)>(ent, std::tuple<>())));
@@ -73,7 +73,7 @@ namespace zre {
 
     private:
         template <typename Tup, typename Pools, size_t Index = 0>
-        [[nodiscard]] constexpr const decltype(auto) genTuple(Ent ent, Tup tup) const noexcept(false) {
+        [[nodiscard]] constexpr const decltype(auto) genTuple(Ent ent, Tup tup) const noexcept {
             auto newTup = std::tuple_cat(tup, std::make_tuple(std::ref(std::get<Index>(pools).get(ent))));
 
             if constexpr (Index < std::tuple_size<Pools>::value - 1)

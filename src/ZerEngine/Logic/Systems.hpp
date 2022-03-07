@@ -67,13 +67,13 @@ namespace zre {
             /**
              * @brief Add new Systems Recursively.
              * 
-             * @tparam Arg 
+             * @tparam Func 
              * @tparam Args 
              * @param func 
              * @param args 
              */
-            template <typename Arg, typename... Args>
-            constexpr void addSysRec(const Arg& func, const Args&... args) noexcept {
+            template <typename Func, typename... Args>
+            constexpr void addSysRec(const Func& func, const Args&... args) noexcept {
                 systems.push_back(func);
 
                 if constexpr (sizeof...(Args) > 0)

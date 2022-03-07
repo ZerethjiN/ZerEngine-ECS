@@ -15,7 +15,6 @@
 #include <unordered_map>
 #include <vector>
 #include <queue>
-#include <memory>
 #include "Query.hpp"
 #include "TypeUtilities.hpp"
 #include "CompPool.hpp"
@@ -24,6 +23,19 @@ namespace zre {
     namespace priv {
         class Reg {
         public:
+            inline Reg() noexcept:
+                compPools(),
+                entComps(),
+                entTokens(),
+                nbEntity(0) {
+            }
+
+            ~Reg() {
+                for (auto& pair: compPools) {
+                    delete(pair.second);
+                }
+            }
+
             /**
              * @brief Create a New Entity in this Registry.
              * 
@@ -33,8 +45,8 @@ namespace zre {
                 Ent ent;
 
                 if (entTokens.empty()) {
-                    ent = NB_ENTITY;
-                    NB_ENTITY++;
+                    ent = nbEntity;
+                    nbEntity++;
                 } else {
                     ent = entTokens.front();
                     entTokens.pop();
@@ -50,11 +62,11 @@ namespace zre {
              * 
              * @param id The Entity to be Destroyed.
              */
-            void destroy(Ent id) noexcept {
+            void destroy(const Ent id) noexcept {
                 auto& comps = entComps.at(id);
 
                 for (size_t i = 0; i < comps.size(); i++) {
-                    compPools.at(comps.at(i))->destroy(id);
+                    compPools.at(comps[i])->destroy(id);
                 }
 
                 entComps.erase(id);
@@ -89,7 +101,7 @@ namespace zre {
 
                 auto& entType = entComps.at(id);
                 for (size_t i = 0; i < entType.size(); i++) {
-                    if (entType.at(i) == type) {
+                    if (entType[i] == type) {
                         entType.erase(entType.begin() + i);
                         return;
                     }
@@ -117,7 +129,7 @@ namespace zre {
              * @return A Reference to the desired Component.
              */
             template <typename T>
-            [[nodiscard]] constexpr T& get(Ent id) noexcept {
+            [[nodiscard]] constexpr T& get(const Ent id) noexcept {
                 return assure<T>().get(id);
             }
 
@@ -129,7 +141,7 @@ namespace zre {
              * @return A Reference to the desired Component.
              */
             template <typename T>
-            [[nodiscard]] constexpr const T& get(Ent id) const noexcept {
+            [[nodiscard]] constexpr const T& get(const Ent id) const noexcept {
                 return assure<T>().get(id);
             }
 
@@ -163,7 +175,7 @@ namespace zre {
             template <typename T>
             [[nodiscard]] constexpr priv::CompPool<T>& assure() noexcept {
                 regPool<T>();
-                return *std::static_pointer_cast<priv::CompPool<T>>(compPools.at(typeid(T).hash_code()));
+                return *static_cast<priv::CompPool<T>*>(compPools.at(typeid(T).hash_code()));
             }
 
             /**
@@ -175,17 +187,20 @@ namespace zre {
             constexpr void regPool() noexcept {
                 const Type type = typeid(T).hash_code();
 
-                if (!compPools.count(type)) {
-                    compPools.emplace(type, std::make_shared<priv::CompPool<T>>());
+                for (auto& pair: compPools) {
+                    if (pair.first == type) {
+                        return;
+                    }
                 }
+
+                compPools.emplace(type, new priv::CompPool<T>());
             }
 
         private:
-            std::unordered_map<Type, std::shared_ptr<ICompPool>> compPools;
+            std::unordered_map<Type, ICompPool*> compPools;
             std::unordered_map<Ent, std::vector<Type>> entComps;
             std::queue<Ent> entTokens;
-
-            static inline Ent NB_ENTITY = 0;
+            Ent nbEntity;
         };
     }
 }

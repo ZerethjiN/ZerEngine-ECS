@@ -22,7 +22,7 @@ namespace zre {
         class ICompPool {
         public:
             virtual ~ICompPool() noexcept = default;
-            virtual void destroy([[maybe_unused]] Ent id) noexcept {};
+            virtual void destroy([[maybe_unused]] const Ent id) noexcept {};
         };
 
         template <typename T>
@@ -50,7 +50,7 @@ namespace zre {
              * 
              * @param id The Entity of the Component to be Deleted.
              */
-            void del(Ent id) noexcept {
+            void del(const Ent id) noexcept {
                 auto posRemoveInfo = entIndex[id];
                 auto posLastInfo = packedComp.size() > 0 ? static_cast<uint32_t>(packedComp.size() - 1) : 0;
                 packedComp[posRemoveInfo] = packedComp[posLastInfo];
@@ -77,7 +77,7 @@ namespace zre {
              * 
              * @param id The Entity to be destroyed.
              */
-            constexpr void destroy(Ent id) noexcept override {
+            constexpr void destroy(const Ent id) noexcept override {
                 del(id);
             }
 
@@ -96,7 +96,7 @@ namespace zre {
              * @param id The Entity Id.
              * @return The Component.
              */
-            [[nodiscard]] constexpr T& get(Ent id) {
+            [[nodiscard]] constexpr T& get(const Ent id) {
                 return packedComp.at(entIndex.at(id));
             }
 
@@ -106,7 +106,7 @@ namespace zre {
              * @param id The Entity Id.
              * @return The Component.
              */
-            [[nodiscard]] constexpr const T& get(Ent id) const {
+            [[nodiscard]] constexpr const T& get(const Ent id) const {
                 return packedComp.at(entIndex.at(id));
             }
 
