@@ -184,7 +184,7 @@ namespace zre {
              * @tparam T 
              */
             template <typename T>
-            constexpr void regPool() noexcept {
+            void regPool() noexcept {
                 const Type type = typeid(T).hash_code();
 
                 for (auto& pair: compPools) {

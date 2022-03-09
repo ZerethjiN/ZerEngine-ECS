@@ -73,7 +73,7 @@ namespace zre {
 
     private:
         template <typename Tup, typename Pools, size_t Index = 0>
-        [[nodiscard]] constexpr const decltype(auto) genTuple(Ent ent, Tup tup) const noexcept {
+        [[nodiscard]] constexpr decltype(auto) genTuple(Ent ent, Tup tup) const noexcept {
             auto newTup = std::tuple_cat(tup, std::make_tuple(std::ref(std::get<Index>(pools).get(ent))));
 
             if constexpr (Index < std::tuple_size<Pools>::value - 1)

@@ -30,6 +30,8 @@
 *.exe
 *.out
 *.app
+*.pdb
+*.exp
 
 # Others
 Main.cpp
