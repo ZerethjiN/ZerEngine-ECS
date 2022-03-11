@@ -15,6 +15,7 @@
 #include <vector>
 #include <algorithm>
 #include <functional>
+#include <iterator>
 #include "TypeUtilities.hpp"
 #include "CompPool.hpp"
 
