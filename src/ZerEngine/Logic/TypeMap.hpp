@@ -74,6 +74,24 @@ namespace zre {
             return std::any_cast<T&>(typeMap.at(typeid(T).hash_code()));
         }
 
+        /**
+         * @brief Delete an Element by its Type.
+         * 
+         * @tparam T
+         */
+        template <typename T>
+        constexpr void del() noexcept {
+            typeMap.erase(typeid(T).hash_code());
+        }
+
+        /**
+         * @brief Clear all elements.
+         * 
+         */
+        inline void clear() noexcept {
+            typeMap.clear();
+        }
+
     private:
         std::unordered_map<size_t, std::any> typeMap;
     };
