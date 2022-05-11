@@ -206,6 +206,10 @@ namespace zre {
             reg.destroy(ent);
         }
 
+        void destroyAll() noexcept {
+            reg.destroyAll();
+        }
+
         /**
          * @brief Stop the Game loop.
          * 

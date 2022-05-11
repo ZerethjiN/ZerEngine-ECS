@@ -108,6 +108,17 @@ namespace zre {
                 }
             }
 
+            void destroyAll() noexcept {
+                for (auto& pair: entComps) {
+                    entTokens.push(pair.first);
+                }
+                for (auto& pair: compPools) {
+                    delete(pair.second);
+                }
+                compPools.clear();
+                entComps.clear();
+            }
+
             template <typename T>
             [[nodiscard]] constexpr bool contains(const Ent id) const noexcept {
                 const Type type = typeid(T).hash_code();
