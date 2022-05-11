@@ -8,6 +8,7 @@ A simple ECS logic core.
 * Possibility to used 64bits of entity instead of 32bits with ``#define ZER_ENT_64BITS``.
 * Simple implementation of components without inheritance.
 * Application easy to build and run.
+* Multi Threading on systems.
 
 # Code Example
 ```c++
@@ -77,10 +78,7 @@ Pass -I argument to the compiler to add the src directory to the include paths.
 ```
 
 # Future Features
-* Multi Threading on systems.
 * Change sparseset by archetypal/sparseset hybrid logic.
 
 # Links
 * [Twitch](https://www.twitch.tv/zerethjin)
-* [Youtube](https://www.youtube.com/channel/UCD2oEhxIyDYdS8-RhF1GoRg)
-* [TikTok](https://www.tiktok.com/@zerethjin)
