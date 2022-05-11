@@ -6,21 +6,26 @@
  * @date 2022-02-22
  * 
  * @copyright Copyright (c) 2022 - ZerethjiN
- * 
  */
 #ifndef ZERENGINE_SYSTEMS_HPP
 #define ZERENGINE_SYSTEMS_HPP
 
-#include <vector>
-#include <functional>
+#include "Threadpool.hpp"
 #include "Registry.hpp"
 
 namespace zre {
-    struct World;
-
     namespace priv {
         class Sys {
         public:
+            /**
+             * @brief Construct a new Sys object.
+             * 
+             * @param world 
+             */
+            Sys(World& world):
+                pool(world) {
+            }
+
             /**
              * @brief Add a new System that runs only once at startup.
              * 
@@ -57,9 +62,13 @@ namespace zre {
              * 
              * @param world 
              */
-            void run(zre::World& world) const noexcept {
-                for (auto& func: systems) {
-                    func(world);
+            void run(zre::World& world) noexcept {
+                for (auto& funcs: systems) {
+                    for (auto& func: funcs) {
+                        pool.addTask(func);
+                    }
+
+                    pool.wait();
                 }
             }
 
@@ -67,22 +76,21 @@ namespace zre {
             /**
              * @brief Add new Systems Recursively.
              * 
-             * @tparam Func 
+             * @tparam Arg 
              * @tparam Args 
              * @param func 
              * @param args 
              */
-            template <typename Func, typename... Args>
-            constexpr void addSysRec(const Func& func, const Args&... args) noexcept {
-                systems.push_back(func);
-
-                if constexpr (sizeof...(Args) > 0)
-                    addSysRec(std::forward<Args>(args)...);
+            template <typename... Args>
+            constexpr void addSysRec(const Args&... args) noexcept {
+                systems.push_back({args...});
             }
 
         private:
             std::vector<std::function<void(zre::World&)>> startSystems;
-            std::vector<std::function<void(zre::World&)>> systems;
+            std::vector<std::vector<std::function<void(zre::World&)>>> systems;
+
+            ThreadPool pool;
         };
     }
 }

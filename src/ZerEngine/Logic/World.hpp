@@ -19,6 +19,13 @@
 namespace zre {
     class World {
     public:
+        World():
+            res(),
+            reg(),
+            sys(*this),
+            isRunning(false) {
+        }
+
         /**
          * @brief Get a resource by its type.
          * 
@@ -197,10 +204,6 @@ namespace zre {
          */
         void destroy(Ent ent) noexcept {
             reg.destroy(ent);
-        }
-
-        void destroyAll() noexcept {
-            reg.destroyAll();
         }
 
         /**
