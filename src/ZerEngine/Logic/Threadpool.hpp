@@ -29,7 +29,8 @@ namespace zre {
              * @param newWorld 
              */
             ThreadPool(World& newWorld):
-                world(newWorld) {
+                world(newWorld),
+                nbThreads(std::thread::hardware_concurrency()) {
                 for (unsigned int i = 0; i < std::thread::hardware_concurrency() - 1; i++) {
                     threads.emplace_back(std::bind(&ThreadPool::task, this));
                 }
@@ -68,7 +69,7 @@ namespace zre {
                 while (!isStop) {
                     std::unique_lock<std::mutex> lock(mtx);
                     cvTask.wait(lock, [&]() {
-                        return !tasks.empty() || isStop;
+                        return (!tasks.empty() || isStop) && busy < nbThreads;
                     });
                     if (isStop && tasks.empty()) {
                         return;
@@ -95,6 +96,7 @@ namespace zre {
             std::atomic_bool isStop = false;
             std::vector<std::thread> threads;
             unsigned int busy;
+            unsigned int nbThreads;
         };
     }
 }
