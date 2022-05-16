@@ -96,7 +96,7 @@ namespace zre {
              * @param id The Entity Id.
              * @return The Component.
              */
-            [[nodiscard]] constexpr T& get(const Ent id) {
+            [[nodiscard]] constexpr T& get(const Ent id) noexcept {
                 return packedComp.at(entIndex.at(id));
             }
 
@@ -106,7 +106,7 @@ namespace zre {
              * @param id The Entity Id.
              * @return The Component.
              */
-            [[nodiscard]] constexpr const T& get(const Ent id) const {
+            [[nodiscard]] constexpr const T& get(const Ent id) const noexcept {
                 return packedComp.at(entIndex.at(id));
             }
 

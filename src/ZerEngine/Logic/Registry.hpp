@@ -15,6 +15,7 @@
 #include <unordered_map>
 #include <vector>
 #include <queue>
+#include <mutex>
 #include "Query.hpp"
 #include "TypeUtilities.hpp"
 #include "CompPool.hpp"
@@ -166,7 +167,8 @@ namespace zre {
              * @return New Query generated.
              */
             template <typename Comp, typename... Comps, typename... Filters, typename... Excludes, typename... Optionnals>
-            [[nodiscard]] constexpr const Query<Comp, comp_t<Comps...>, With<Filters...>, Without<Excludes...>, OrWith<Optionnals...>> query(comp_t<Comps...> = {}, With<Filters...> = {}, Without<Excludes...> = {}, OrWith<Optionnals...> = {}) noexcept {
+            [[nodiscard]] constexpr const Query<Comp, comp_t<Comps...>, With<Filters...>, Without<Excludes...>, OrWith<Optionnals...>> query(comp_t<Comps...> = {}, With<Filters...> = {}, Without<Excludes...> = {}, OrWith<Optionnals...> = {}) noexcept(false) {
+                std::unique_lock lck(mtx);
                 return {
                     assure<Comp>(),
                     assure<Comps>()...,
@@ -184,7 +186,7 @@ namespace zre {
              * @return A Pool of Components.
              */
             template <typename T>
-            [[nodiscard]] constexpr priv::CompPool<T>& assure() noexcept {
+            [[nodiscard]] constexpr priv::CompPool<T>& assure() noexcept(false) {
                 regPool<T>();
                 return *static_cast<priv::CompPool<T>*>(compPools.at(typeid(T).hash_code()));
             }
@@ -212,6 +214,7 @@ namespace zre {
             std::unordered_map<Ent, std::vector<Type>> entComps;
             std::queue<Ent> entTokens;
             Ent nbEntity;
+            std::mutex mtx;
         };
     }
 }
