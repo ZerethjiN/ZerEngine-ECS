@@ -43,7 +43,12 @@ namespace zre {
              */
             template <typename... Args>
             constexpr void addSys(const Args&... args) noexcept {
-                addSysRec(args...);
+                systems.push_back(std::pair<std::function<bool(zre::World&)>, std::vector<std::function<void(zre::World&)>>>(nullptr, {args...}));
+            }
+
+            template <typename... Args>
+            constexpr void addCondSys(const std::function<bool(zre::World&)>& func, const Args&... args) noexcept {
+                systems.push_back(std::pair<std::function<bool(zre::World&)>, std::vector<std::function<void(zre::World&)>>>(func, {args...}));
             }
 
             /**
@@ -64,31 +69,19 @@ namespace zre {
              */
             void run(zre::World& world) noexcept {
                 for (auto& funcs: systems) {
-                    for (auto& func: funcs) {
-                        pool.addTask(func);
-                    }
+                    if (funcs.first == nullptr || funcs.first(world)) {
+                        for (auto& func: funcs.second) {
+                            pool.addTask(func);
+                        }
 
-                    pool.wait();
+                        pool.wait();
+                    }
                 }
             }
 
         private:
-            /**
-             * @brief Add new Systems Recursively.
-             * 
-             * @tparam Arg 
-             * @tparam Args 
-             * @param func 
-             * @param args 
-             */
-            template <typename... Args>
-            constexpr void addSysRec(const Args&... args) noexcept {
-                systems.push_back({args...});
-            }
-
-        private:
             std::vector<std::function<void(zre::World&)>> startSystems;
-            std::vector<std::vector<std::function<void(zre::World&)>>> systems;
+            std::vector<std::pair<std::function<bool(zre::World&)>, std::vector<std::function<void(zre::World&)>>>> systems;
 
             ThreadPool pool;
         };

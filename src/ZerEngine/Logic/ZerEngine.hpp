@@ -64,6 +64,12 @@ namespace zre {
             return *this;
         }
 
+        template <typename... Args>
+        constexpr ZerEngine& addCondSys(const std::function<bool(World&)>& func, const Args&... args) noexcept {
+            world.sys.addCondSys(func, args...);
+            return *this;
+        }
+
         /**
          * @brief Run this application.
          * 

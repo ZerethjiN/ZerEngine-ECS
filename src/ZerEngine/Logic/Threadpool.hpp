@@ -30,7 +30,7 @@ namespace zre {
              */
             ThreadPool(World& newWorld):
                 world(newWorld),
-                nbThreads(std::thread::hardware_concurrency()) {
+                nbThreads(std::thread::hardware_concurrency() - 1) {
                 for (unsigned int i = 0; i < std::thread::hardware_concurrency() - 1; i++) {
                     threads.emplace_back(std::bind(&ThreadPool::task, this));
                 }
@@ -53,7 +53,7 @@ namespace zre {
             void wait() {
                 std::unique_lock<std::mutex> lock(mtx);
                 cvFinished.wait(lock, [&]() {
-                    return tasks.empty() && (busy == 0);
+                    return tasks.empty() && (nbTasks == 0);
                 });
             }
 
@@ -66,15 +66,15 @@ namespace zre {
             }
 
             void task() {
-                while (!isStop) {
+                while (true) {
                     std::unique_lock<std::mutex> lock(mtx);
                     cvTask.wait(lock, [&]() {
-                        return (!tasks.empty() || isStop) && busy < nbThreads;
+                        return nbTasks < nbThreads && (!tasks.empty() || isStop);
                     });
                     if (isStop && tasks.empty()) {
                         return;
                     }
-                    busy++;
+                    nbTasks++;
                     auto task = std::move(tasks.front());
                     tasks.pop();
                     lock.unlock();
@@ -82,7 +82,7 @@ namespace zre {
                     task(world);
 
                     lock.lock();
-                    busy--;
+                    nbTasks--;
                     cvFinished.notify_one();
                 }
             }
@@ -95,8 +95,13 @@ namespace zre {
             std::condition_variable cvFinished;
             std::atomic_bool isStop = false;
             std::vector<std::thread> threads;
-            unsigned int busy;
-            unsigned int nbThreads;
+            #ifdef ZER_THREAD_16BITS
+                std::atomic_uint16_t nbTasks;
+                std::atomic_uint16_t nbThreads;
+            #else
+                std::atomic_uint8_t nbTasks;
+                std::atomic_uint8_t nbThreads;
+            #endif
         };
     }
 }

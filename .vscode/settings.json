@@ -6,6 +6,17 @@
         "*.tcc": "cpp",
         "deque": "cpp",
         "vector": "cpp",
-        "chrono": "cpp"
+        "chrono": "cpp",
+        "functional": "cpp",
+        "map": "cpp",
+        "memory": "cpp",
+        "random": "cpp",
+        "system_error": "cpp",
+        "thread": "cpp",
+        "type_traits": "cpp",
+        "xmemory": "cpp",
+        "xstddef": "cpp",
+        "xstring": "cpp",
+        "tuple": "cpp"
     }
 }
