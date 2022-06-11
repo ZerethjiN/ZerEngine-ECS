@@ -36,3 +36,5 @@
 # Others
 Main.cpp
 .vscode\settings.json
+*.bat
+*.sh

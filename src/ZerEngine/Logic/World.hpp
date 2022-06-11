@@ -142,7 +142,20 @@ namespace zre {
         }
 
         /**
-         * @brief Add a new Component to an Entity bases on its Component Type and Entity Id.
+         * @brief Emplace a new Component to an Entity bases on its Component Type and Entity Id.
+         * 
+         * @tparam T 
+         * @tparam Args 
+         * @param id 
+         * @param args 
+         */
+        template <typename T, typename... Args>
+        constexpr void emplace(Ent id, Args&&... args) noexcept {
+            reg.emplace<T>(id, std::forward<Args>(args)...);
+        }
+
+        /**
+         * @brief Add new Components to an Entity bases.
          * 
          * @tparam T 
          * @tparam Args 

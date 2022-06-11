@@ -75,12 +75,26 @@ namespace zre {
             }
 
             /**
-             * @brief Add a new Component to an Entity bases on its Component Type and Entity Id.
+             * @brief Emplace a new Component to an Entity bases on its Component Type and Entity Id.
              * 
              * @tparam T 
              * @tparam Args 
              * @param id Entity Id.
              * @param args Arguments to generate the new Component.
+             */
+            template <typename T, typename... Args>
+            constexpr void emplace(const Ent id, Args&&... args) {
+                entComps.at(id).push_back(typeid(T).hash_code());
+                assure<T>().emplace(id, std::forward<Args>(args)...);
+            }
+
+            /**
+             * @brief Add new Components to an Entity.
+             * 
+             * @tparam T 
+             * @tparam Args 
+             * @param id Entity Id.
+             * @param args The new Components.
              */
             template <typename T, typename... Args>
             constexpr void add(const Ent id, Args&&... args) {

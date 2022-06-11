@@ -29,7 +29,7 @@ namespace zre {
         class CompPool: public ICompPool {
         public:
             /**
-             * @brief Add a new Component to this Pool,
+             * @brief Emplace a new Component to this Pool,
              * with its Entity and Attributes.
              * 
              * @tparam Args
@@ -37,8 +37,24 @@ namespace zre {
              * @param args Arguments needed to construct the New Component.
              */
             template <typename... Args>
-            void add(const Ent id, Args&&... args) noexcept {
+            void emplace(const Ent id, Args&&... args) noexcept {
                 packedComp.emplace_back(T{std::forward<Args>(args)...});
+                entIndex.emplace(id, packedComp.size() - 1);
+                indexEnt.emplace(packedComp.size() - 1, id);
+                packedEnts.emplace_back(id);
+                sort(packedEnts.begin(), packedEnts.end());
+            }
+
+            /**
+             * @brief Add new Components to this Pool.
+             * 
+             * @tparam Args
+             * @param id The Entity of the New Component.
+             * @param args The New Components.
+             */
+            template <typename... Args>
+            void add(const Ent id, Args&&... args) noexcept {
+                packedComp.push_back(std::forward<Args>(args)...);
                 entIndex.emplace(id, packedComp.size() - 1);
                 indexEnt.emplace(packedComp.size() - 1, id);
                 packedEnts.emplace_back(id);
