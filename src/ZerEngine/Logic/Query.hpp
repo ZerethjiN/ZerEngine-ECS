@@ -94,7 +94,7 @@ namespace zre {
         }
 
         template <typename OrPool, typename... OrPools>
-        constexpr const std::vector<Ent> unionRec(const std::vector<Ent> oldEnts, OrPool& orPool, OrPools&... orPools) noexcept {
+        const std::vector<Ent> unionRec(const std::vector<Ent> oldEnts, OrPool& orPool, OrPools&... orPools) noexcept {
             auto newEnts = unionWith(oldEnts, orPool.getEnts());
             if constexpr (sizeof...(OrPools) > 0)
                 return unionRec(newEnts, orPools...);
@@ -109,7 +109,7 @@ namespace zre {
                 differenceRec(exclPools...);
         }
 
-        constexpr void intersectWith(const std::vector<Ent>& other) noexcept {
+        void intersectWith(const std::vector<Ent>& other) noexcept {
             std::vector<Ent> tmpEnts;
             std::set_intersection(
                 ents.begin(), ents.end(),
@@ -119,7 +119,7 @@ namespace zre {
             ents.swap(tmpEnts);
         }
 
-        constexpr const std::vector<Ent> unionWith(const std::vector<Ent>& entA, const std::vector<Ent>& entB) noexcept {
+        const std::vector<Ent> unionWith(const std::vector<Ent>& entA, const std::vector<Ent>& entB) noexcept {
             std::vector<Ent> tmpEnts;
             std::set_union(
                 entA.begin(), entA.end(),
@@ -129,7 +129,7 @@ namespace zre {
             return tmpEnts;
         }
 
-        constexpr void differenceWith(const std::vector<Ent>& other) noexcept {
+        void differenceWith(const std::vector<Ent>& other) noexcept {
             std::vector<Ent> tmpEnts;
             std::set_difference(
                 ents.begin(), ents.end(),
