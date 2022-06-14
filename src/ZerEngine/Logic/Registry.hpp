@@ -181,8 +181,8 @@ namespace zre {
              * @return New Query generated.
              */
             template <typename Comp, typename... Comps, typename... Filters, typename... Excludes, typename... Optionnals>
-            [[nodiscard]] constexpr const Query<Comp, comp_t<Comps...>, With<Filters...>, Without<Excludes...>, OrWith<Optionnals...>> query(comp_t<Comps...> = {}, With<Filters...> = {}, Without<Excludes...> = {}, OrWith<Optionnals...> = {}) noexcept(false) {
-                std::unique_lock lck(mtx);
+            [[nodiscard]] const Query<Comp, comp_t<Comps...>, With<Filters...>, Without<Excludes...>, OrWith<Optionnals...>> query(comp_t<Comps...> = {}, With<Filters...> = {}, Without<Excludes...> = {}, OrWith<Optionnals...> = {}) noexcept(false) {
+                std::lock_guard lck(mtx);
                 return {
                     assure<Comp>(),
                     assure<Comps>()...,
@@ -200,9 +200,13 @@ namespace zre {
              * @return A Pool of Components.
              */
             template <typename T>
-            [[nodiscard]] constexpr priv::CompPool<T>& assure() noexcept(false) {
-                regPool<T>();
-                return *static_cast<priv::CompPool<T>*>(compPools.at(typeid(T).hash_code()));
+            [[nodiscard]] inline priv::CompPool<T>& assure() noexcept(false) {
+                try {
+                    return static_cast<priv::CompPool<T>&>(*compPools.at(typeid(T).hash_code()));
+                } catch(std::exception& e) {
+                    regPool<T>();
+                    return static_cast<priv::CompPool<T>&>(*compPools.at(typeid(T).hash_code()));
+                }
             }
 
             /**
@@ -211,16 +215,8 @@ namespace zre {
              * @tparam T 
              */
             template <typename T>
-            void regPool() noexcept {
-                const Type type = typeid(T).hash_code();
-
-                for (auto& pair: compPools) {
-                    if (pair.first == type) {
-                        return;
-                    }
-                }
-
-                compPools.emplace(type, new priv::CompPool<T>());
+            void constexpr regPool() noexcept {
+                compPools.emplace(typeid(T).hash_code(), new priv::CompPool<T>());
             }
 
         private:

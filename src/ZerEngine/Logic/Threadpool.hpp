@@ -30,6 +30,7 @@ namespace zre {
              */
             ThreadPool(World& newWorld):
                 world(newWorld),
+                isStop(false),
                 nbThreads(std::thread::hardware_concurrency() - 1) {
                 for (unsigned int i = 0; i < std::thread::hardware_concurrency() - 1; i++) {
                     threads.emplace_back(std::bind(&ThreadPool::task, this));
@@ -45,7 +46,7 @@ namespace zre {
 
             template <class Func>
             void addTask(Func&& func) {
-                std::unique_lock<std::mutex> lock(mtx);
+                std::lock_guard<std::mutex> lock(mtx);
                 tasks.emplace(std::forward<Func>(func));
                 cvTask.notify_one();
             }
@@ -59,10 +60,8 @@ namespace zre {
 
         private:
             void stop() {
-                std::unique_lock<std::mutex> lock(mtx);
                 isStop = true;
                 cvTask.notify_all();
-                lock.unlock();
             }
 
             void task() {
@@ -93,15 +92,10 @@ namespace zre {
             std::mutex mtx;
             std::condition_variable cvTask;
             std::condition_variable cvFinished;
-            std::atomic_bool isStop = false;
+            std::atomic_bool isStop;
             std::vector<std::thread> threads;
-            #ifdef ZER_THREAD_16BITS
-                std::atomic_uint16_t nbTasks;
-                std::atomic_uint16_t nbThreads;
-            #else
-                std::atomic_uint8_t nbTasks;
-                std::atomic_uint8_t nbThreads;
-            #endif
+            std::atomic_uint64_t nbTasks;
+            std::atomic_uint64_t nbThreads;
         };
     }
 }
