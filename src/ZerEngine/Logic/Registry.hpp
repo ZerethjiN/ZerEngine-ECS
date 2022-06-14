@@ -182,11 +182,7 @@ namespace zre {
              */
             template <typename Comp, typename... Comps, typename... Filters, typename... Excludes, typename... Optionnals>
             [[nodiscard]] const Query<Comp, comp_t<Comps...>, With<Filters...>, Without<Excludes...>, OrWith<Optionnals...>> query(comp_t<Comps...> = {}, With<Filters...> = {}, Without<Excludes...> = {}, OrWith<Optionnals...> = {}) noexcept(false) {
-<<<<<<< HEAD
                 std::lock_guard lck(mtx);
-=======
-                std::unique_lock lck(mtx);
->>>>>>> 23d36bdedec15ff7b4d17a2b69a88f04c15b9d50
                 return {
                     assure<Comp>(),
                     assure<Comps>()...,
