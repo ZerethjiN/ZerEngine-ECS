@@ -1,5 +1,5 @@
-#ifndef ZERENGINE_HPP
-#define ZERENGINE_HPP
+#ifndef ZERENGINE
+#define ZERENGINE
 
 #include "Logic/ZerEngine.hpp"
 

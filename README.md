@@ -3,9 +3,8 @@
 
 A simple ECS logic core.
 
-* Cache Friendly Component managed by a sparse set.
+* Cache Friendly Component managed by Archetypal.
 * Dynamic resource added by user and easy to access.
-* Possibility to used 64bits of entity instead of 32bits with ``#define ZER_ENT_64BITS``.
 * Simple implementation of components without inheritance.
 * Application easy to build and run.
 * Multi Threading on systems.
@@ -54,8 +53,27 @@ void movePosSys(zre::World& world) {
     });
 }
 
+void secondThreadedSys(zre::Wordl& world) {
+    /* My second thread */
+}
+
 void stopRunSys(zre::World& world) {
     world.stopRun();
+}
+
+// Render System
+void renderCopySys(zre::World& world, zre::priv::LiteRegistry& reg) noexcept {
+    reg.clear();
+
+    reg.copyFromQuery(world.query</*Sprite, Transform, ...*/>());
+}
+
+void renderSys(zre::World& world, zre::priv::LiteRegistry& renderReg) noexcept {
+    auto sprts = renderReg.query</*Sprite, Transform, ...*/>();
+    
+    sprts.each([&](/*auto& Sprite, auto& Transform, ...*/) {
+        /* My Render */
+    });
 }
 
 int main() {
@@ -63,8 +81,11 @@ int main() {
     zre::ZerEngine()
         .addRes<FakeTime>()
         .addStartSys(initPos)
-        .addSys(movePosSys)
+        .addSys(movePosSys, secondThreadedSys)
         .addSys(stopRunSys)
+        .addLateSys(/*...*/)
+        .addRenderCopy(renderCopySys)
+        .addRender(renderSys)
         .run();
 
     return 0;
@@ -76,9 +97,6 @@ Pass -I argument to the compiler to add the src directory to the include paths.
 ```c++
 #include <ZerEngine/ZerEngine.hpp>
 ```
-
-# Future Features
-* Change sparseset by archetypal/sparseset hybrid logic.
 
 # Links
 * [Twitch](https://www.twitch.tv/zerethjin)
