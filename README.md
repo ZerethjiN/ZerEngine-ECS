@@ -97,6 +97,3 @@ Pass -I argument to the compiler to add the src directory to the include paths.
 ```c++
 #include <ZerEngine/ZerEngine.hpp>
 ```
-
-# Links
-* [Twitch](https://www.twitch.tv/zerethjin)
