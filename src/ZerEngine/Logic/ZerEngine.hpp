@@ -1,12 +1,11 @@
 /**
  * @file ZerEngine.hpp
  * @author ZerethjiN
- * @brief An init application for the game.
- * @version 0.1
- * @date 2022-02-22
+ * @brief 
+ * @version 0.2
+ * @date 2022-07-18
  * 
  * @copyright Copyright (c) 2022 - ZerethjiN
- * 
  */
 #ifndef ZERENGINE_ZERENGINE_HPP
 #define ZERENGINE_ZERENGINE_HPP
@@ -18,75 +17,117 @@ namespace zre {
     public:
         /**
          * @brief Run a plugin to add Entities or Systems on this application.
-         * 
-         * @param func 
-         * @return ZerEngine& 
          */
-        ZerEngine& addPlugin(const std::function<void(zre::ZerEngine&)>& func) noexcept {
+        [[nodiscard]] constexpr ZerEngine& addPlugin(void(*const func)(zre::ZerEngine&)) noexcept {
             func(*this);
             return *this;
         }
 
         /**
          * @brief Add a new resource with its type.
-         * 
-         * @tparam T 
-         * @param t 
-         * @return
          */
         template <typename T, typename... Args>
-        constexpr ZerEngine& addRes(Args&&... args) noexcept {
-            world.res.emplace<T>(std::forward<Args>(args)...);
+        [[nodiscard]] constexpr ZerEngine& addRes(Args&&... args) noexcept {
+            world.getRes().emplace<T>(std::forward<Args>(args)...);
             return *this;
         }
 
         /**
          * @brief Add a new System that runs only once at startup.
-         * 
-         * @param func 
-         * @return ZerEngine& 
          */
-        ZerEngine& addStartSys(const std::function<void(zre::World&)>& func) noexcept {
-            world.sys.addStartSys(func);
+        [[nodiscard]] constexpr ZerEngine& addStartSys(void(*const func)(World&)) noexcept {
+            world.getSys().addStartSys(func);
+            return *this;
+        }
+
+        [[nodiscard]] constexpr ZerEngine& addMainSys(void(*const func)(World&)) noexcept {
+            world.getSys().addMainSys(func);
+            return *this;
+        }
+
+        [[nodiscard]] constexpr ZerEngine& addCondSys(bool(*const cond)(World&), void(*const func)(World&)) noexcept {
+            world.getSys().addMainCondSys(cond, func);
+            return *this;
+        }
+
+        [[nodiscard]] constexpr ZerEngine& addLateSys(void(*const func)(World&)) noexcept {
+            world.getSys().addLateSys(func);
+            return *this;
+        }
+
+        [[nodiscard]] constexpr ZerEngine& addLateCondSys(bool(*const cond)(World&), void(*const func)(World&)) noexcept {
+            world.getSys().addLateCondSys(cond, func);
             return *this;
         }
 
         /**
          * @brief Add a new System running each frame.
-         * 
-         * @tparam Args 
-         * @param args 
-         * @return constexpr ZerEngine& 
          */
         template <typename... Args>
-        constexpr ZerEngine& addSys(const Args&... args) noexcept {
-            world.sys.addSys(args...);
+        [[nodiscard]] constexpr ZerEngine& addSys(const Args&... args) noexcept {
+            world.getSys().addSys(args...);
             return *this;
         }
 
+        /**
+         * @brief Add a new System running each frame only if the condition is valid.
+         */
         template <typename... Args>
-        constexpr ZerEngine& addCondSys(const std::function<bool(World&)>& func, const Args&... args) noexcept {
-            world.sys.addCondSys(func, args...);
+        [[nodiscard]] constexpr ZerEngine& addCondSys(bool(*const cond)(World&), const Args&... args) noexcept {
+            world.getSys().addCondSys(cond, args...);
+            return *this;
+        }
+
+        /**
+         * @brief Add a new System running each frame.
+         */
+        template <typename... Args>
+        [[nodiscard]] constexpr ZerEngine& addLateSys(const Args&... args) noexcept {
+            world.getSys().addLateSys(args...);
+            return *this;
+        }
+
+        /**
+         * @brief Add a new System running each frame only if the condition is valid.
+         */
+        template <typename... Args>
+        [[nodiscard]] constexpr ZerEngine& addLateCondSys(bool(*const cond)(World&), const Args&... args) noexcept {
+            world.getSys().addLateCondSys(cond, args...);
+            return *this;
+        }
+
+        /**
+         * @brief Add a new System to Copy the Registry Data for the Rendering Thread.
+         */
+        [[nodiscard]] constexpr ZerEngine& addRenderCopy(void(*newRenderCopyFunc)(World&, priv::LiteRegistry&)) noexcept {
+            world.getSys().addRenderCopy(newRenderCopyFunc);
+            return *this;
+        }
+
+        /**
+         * @brief Add a new Rendering System.
+         */
+        [[nodiscard]] constexpr ZerEngine& addRender(void(*newRenderFunc)(World&, priv::LiteRegistry&)) noexcept {
+            world.getSys().addRender(newRenderFunc);
             return *this;
         }
 
         /**
          * @brief Run this application.
-         * 
-         * @return ZerEngine& 
          */
-        ZerEngine& run() noexcept {
-            world.isRunning = true;
-            world.sys.start(world);
-            while (world.isRunning) {
-                world.sys.run(world);
+        constexpr void run() noexcept {
+            world.setIsRunning(true);
+            world.getSys().start(world);
+            while (world.getIsRunning()) {
+                world.upgrade();
+                world.getSys().run(world);
             }
-            return *this;
+            world.upgrade();
         }
 
     private:
-        zre::World world;
+        World world;
     };
 }
 
-#endif // ZERENGINE_ZERENGINE_HPP
+#endif /** ZERENGINE_ZERENGINE_HPP */

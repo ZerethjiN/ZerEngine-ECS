@@ -34,7 +34,9 @@
 *.exp
 
 # Others
-Main.cpp
+srcTest
 .vscode\settings.json
 *.bat
 *.sh
+**._*
+**.DS_STORE*
