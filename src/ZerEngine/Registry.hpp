@@ -35,7 +35,7 @@ public:
         return ent;
     }
 
-    constexpr void newEntLate(const Ent ent, const std::vector<LateUpgradeAddData>& comps) noexcept {
+    inline void newEntLate(const Ent ent, const std::vector<LateUpgradeAddData>& comps) noexcept {
         if (archsBySize.contains(comps.size())) {
             for (auto* arch: archsBySize.at(comps.size())) {
                 if (arch->isTotalyCompatibleLate(comps)) {
