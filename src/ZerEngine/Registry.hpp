@@ -35,11 +35,11 @@ public:
         return ent;
     }
 
-    inline void newEntLate(const Ent ent, const std::vector<LateUpgradeAddData>& comps) noexcept {
+    inline void newEnt(const Ent ent, const std::vector<LateUpgradeAddData>& comps) noexcept {
         if (archsBySize.contains(comps.size())) {
             for (auto* arch: archsBySize.at(comps.size())) {
                 if (arch->isTotalyCompatibleLate(comps)) {
-                    arch->newEntLate(ent, comps);
+                    arch->newEnt(ent, comps);
                     entArch.emplace(ent, arch);
                     return;
                 }
@@ -55,8 +55,8 @@ public:
         auto* arch = new Archetype();
         archs.emplace(arch);
         archsBySize.at(comps.size()).emplace(arch);
-        arch->createLate(comps);
-        arch->newEntLate(ent, comps);
+        arch->create(comps);
+        arch->newEnt(ent, comps);
         entArch.emplace(ent, arch);
         return;
     }
@@ -76,13 +76,13 @@ public:
         return entArch.at(ent)->types.contains(typeid(T).hash_code());
     }
 
-    inline void addLate(const Ent ent, const LateUpgradeAddData& comp) noexcept {
+    inline void add(const Ent ent, const LateUpgradeAddData& comp) noexcept {
         auto* oldArch = entArch.at(ent);
 
         if (archsBySize.contains(oldArch->types.size() + 1)) {
             for (auto* arch: archsBySize.at(oldArch->types.size() + 1)) {
                 if (arch->isTotalyCompatibleLate(*oldArch, comp)) {
-                    arch->addLate(ent, *oldArch, comp);
+                    arch->add(ent, *oldArch, comp);
                     entArch.at(ent) = arch;
                     if (oldArch->size() <= 0 && oldArch->types.size() > 0) {
                         archsBySize.at(oldArch->types.size()).erase(oldArch);
@@ -103,8 +103,8 @@ public:
         auto* arch = new Archetype();
         archs.emplace(arch);
         archsBySize.at(oldArch->types.size() + 1).emplace(arch);
-        arch->createWithLate(*oldArch, comp);
-        arch->addLate(ent, *oldArch, comp);
+        arch->createWith(*oldArch, comp);
+        arch->add(ent, *oldArch, comp);
         entArch.at(ent) = arch;
         if (oldArch->size() <= 0 && oldArch->types.size() > 0) {
             archsBySize.at(oldArch->types.size()).erase(oldArch);
@@ -113,7 +113,7 @@ public:
         }
     }
 
-    inline void delLate(const Ent ent, const LateUpgradeDelCompData& comp) noexcept {
+    inline void del(const Ent ent, const LateUpgradeDelCompData& comp) noexcept {
         auto* oldArch = entArch.at(ent);
 
         destructors.at(comp.type)->del(entArch.at(ent)->getPtr(ent, comp.type));
@@ -121,7 +121,7 @@ public:
         if (archsBySize.contains(oldArch->types.size() - 1)) {
             for (auto* arch: archsBySize.at(oldArch->types.size() - 1)) {
                 if (arch->isTotalyCompatibleWithoutLate(*oldArch, comp)) {
-                    arch->delLate(ent, *oldArch, comp);
+                    arch->del(ent, *oldArch, comp);
                     entArch.at(ent) = arch;
                     if (oldArch->size() <= 0 && oldArch->types.size() > 0) {
                         archsBySize.at(oldArch->types.size()).erase(oldArch);
@@ -142,8 +142,8 @@ public:
         auto* arch = new Archetype();
         archs.emplace(arch);
         archsBySize.at(oldArch->types.size() - 1).emplace(arch);
-        arch->createWithoutLate(*oldArch, comp);
-        arch->delLate(ent, *oldArch, comp);
+        arch->createWithout(*oldArch, comp);
+        arch->del(ent, *oldArch, comp);
         entArch.at(ent) = arch;
         if (oldArch->size() <= 0 && oldArch->types.size() > 0) {
             archsBySize.at(oldArch->types.size()).erase(oldArch);

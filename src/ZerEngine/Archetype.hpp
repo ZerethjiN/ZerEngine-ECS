@@ -19,7 +19,7 @@ public:
         }
     }
 
-    constexpr void createLate(const std::vector<LateUpgradeAddData>& comps) noexcept {
+    constexpr void create(const std::vector<LateUpgradeAddData>& comps) noexcept {
         types.reserve(comps.size());
         for (const auto& comp: comps) {
             types.emplace(
@@ -35,7 +35,7 @@ public:
         }
     }
 
-    constexpr void createWithLate(const Archetype& oldArch, const LateUpgradeAddData& comp) noexcept {
+    constexpr void createWith(const Archetype& oldArch, const LateUpgradeAddData& comp) noexcept {
         types = oldArch.types;
         rowSize = oldArch.rowSize;
         if (!types.contains(comp.type)) {
@@ -52,7 +52,7 @@ public:
         }
     }
 
-    inline void createWithoutLate(const Archetype& oldArch, const LateUpgradeDelCompData& comp) noexcept {
+    inline void createWithout(const Archetype& oldArch, const LateUpgradeDelCompData& comp) noexcept {
         for (const auto& pairTypes: oldArch.types) {
             if (pairTypes.first != comp.type) {
                 types.emplace(
@@ -69,7 +69,7 @@ public:
         }
     }
 
-    constexpr void newEntLate(const Ent ent, const std::vector<LateUpgradeAddData>& comps) noexcept {
+    constexpr void newEnt(const Ent ent, const std::vector<LateUpgradeAddData>& comps) noexcept {
         if (!(entIdx.size() & maxCapacity)) {
             if (pagesize >= (rowSize << 1)) {
                 datas.emplace_back(aligned_malloc(pagesize, pagesize));
@@ -80,17 +80,17 @@ public:
         auto idx = entIdx.size();
         entIdx.emplace(ent, idx);
         idxEnt.emplace(idx, ent);
-        auto* data = datas[idx >> shiftMultiplier];
+        auto* data = static_cast<std::byte*>(datas[idx >> shiftMultiplier]) + (rowSize * (idx & maxCapacity));
         for (const auto& comp: comps) {
             memcpy(
-                static_cast<std::byte*>(data) + (rowSize * (idx & maxCapacity)) + types.at(comp.type).offset,
+                data + types.at(comp.type).offset,
                 comp.data,
                 comp.size
             );
         }
     }
 
-    inline void addLate(const Ent ent, Archetype& oldArch, const LateUpgradeAddData& comp) noexcept {
+    inline void add(const Ent ent, Archetype& oldArch, const LateUpgradeAddData& comp) noexcept {
         if (!(entIdx.size() & maxCapacity)) {
             if (pagesize >= (rowSize << 1)) {
                 datas.emplace_back(aligned_malloc(pagesize, pagesize));
@@ -102,21 +102,21 @@ public:
         entIdx.emplace(ent, idx);
         idxEnt.emplace(idx, ent);
 
-        auto* data = datas[idx >> shiftMultiplier];
+        auto* data = static_cast<std::byte*>(datas[idx >> shiftMultiplier]) + (rowSize * (idx & maxCapacity));
 
         auto othIdx = oldArch.entIdx.at(ent);
-        const auto* othData = oldArch.datas[othIdx >> oldArch.shiftMultiplier];
+        const auto* othData = static_cast<const std::byte*>(oldArch.datas[othIdx >> oldArch.shiftMultiplier]) + (oldArch.rowSize * (othIdx & oldArch.maxCapacity));
 
         for (const auto& pairTypes: oldArch.types) {
             memcpy(
-                static_cast<std::byte*>(data) + (rowSize * (idx & maxCapacity)) + types.at(pairTypes.first).offset,
-                static_cast<const std::byte*>(othData) + (oldArch.rowSize * (othIdx & oldArch.maxCapacity)) + pairTypes.second.offset,
+                data + types.at(pairTypes.first).offset,
+                othData + pairTypes.second.offset,
                 types.at(pairTypes.first).size
             );
         }
 
         memcpy(
-            static_cast<std::byte*>(data) + (rowSize * (idx & maxCapacity)) + types.at(comp.type).offset,
+            data + types.at(comp.type).offset,
             comp.data,
             comp.size
         );
@@ -124,7 +124,7 @@ public:
         oldArch.destroy(ent);
     }
 
-    inline void delLate(const Ent ent, Archetype& oldArch, const LateUpgradeDelCompData& comp) noexcept {
+    inline void del(const Ent ent, Archetype& oldArch, const LateUpgradeDelCompData& comp) noexcept {
         if (!(entIdx.size() & maxCapacity)) {
             if (pagesize >= (rowSize << 1)) {
                 datas.emplace_back(aligned_malloc(pagesize, pagesize));
@@ -136,16 +136,16 @@ public:
         entIdx.emplace(ent, idx);
         idxEnt.emplace(idx, ent);
 
-        auto* data = datas[idx >> shiftMultiplier];
+        auto* data = static_cast<std::byte*>(datas[idx >> shiftMultiplier]) + (rowSize * (idx & maxCapacity));
 
         auto othIdx = oldArch.entIdx.at(ent);
-        const auto* othData = oldArch.datas[othIdx >> oldArch.shiftMultiplier];
+        const auto* othData = static_cast<const std::byte*>(oldArch.datas[othIdx >> oldArch.shiftMultiplier]) + (oldArch.rowSize * (othIdx & oldArch.maxCapacity));
 
         for (const auto& pairTypes: oldArch.types) {
             if (pairTypes.first != comp.type) {
                 memcpy(
-                    static_cast<std::byte*>(data) + (rowSize * (idx & maxCapacity)) + types.at(pairTypes.first).offset,
-                    static_cast<const std::byte*>(othData) + (oldArch.rowSize * (othIdx & oldArch.maxCapacity)) + pairTypes.second.offset,
+                    data + types.at(pairTypes.first).offset,
+                    othData + pairTypes.second.offset,
                     types.at(pairTypes.first).size
                 );
             }
@@ -156,16 +156,16 @@ public:
 
     template <typename T>
     [[nodiscard]] constexpr T& get(const Ent ent) noexcept {
-        return reinterpret_cast<T&>(static_cast<std::byte*>(datas[entIdx.at(ent) >> shiftMultiplier])[(rowSize * (entIdx.at(ent) & maxCapacity)) + types.at(typeid(T).hash_code()).offset]);
+        return static_cast<T&>(static_cast<std::byte*>(datas[entIdx.at(ent) >> shiftMultiplier])[(rowSize * (entIdx.at(ent) & maxCapacity)) + types.at(typeid(T).hash_code()).offset]);
     }
 
     template <typename T>
     [[nodiscard]] constexpr const T& get(const Ent ent) const noexcept {
-        return reinterpret_cast<T&>(static_cast<std::byte*>(datas[entIdx.at(ent) >> shiftMultiplier])[(rowSize * (entIdx.at(ent) & maxCapacity)) + types.at(typeid(T).hash_code()).offset]);
+        return static_cast<T&>(static_cast<std::byte*>(datas[entIdx.at(ent) >> shiftMultiplier])[(rowSize * (entIdx.at(ent) & maxCapacity)) + types.at(typeid(T).hash_code()).offset]);
     }
 
-    [[nodiscard]] inline void* getPtr(const Ent ent, const Type type) const noexcept {
-        return reinterpret_cast<void*>(static_cast<std::byte*>(datas[entIdx.at(ent) >> shiftMultiplier])[(rowSize * (entIdx.at(ent) & maxCapacity)) + types.at(type).offset]);
+    [[nodiscard]] constexpr void* getPtr(const Ent ent, const Type type) const noexcept {
+        return static_cast<void*>(static_cast<std::byte*>(datas[entIdx.at(ent) >> shiftMultiplier]) + (rowSize * (entIdx.at(ent) & maxCapacity)) + types.at(type).offset);
     }
 
     [[nodiscard]] constexpr std::size_t size() const noexcept {

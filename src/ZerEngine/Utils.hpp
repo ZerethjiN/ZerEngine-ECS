@@ -42,9 +42,9 @@ struct TypeInfos final {
 struct LateUpgradeAddData final {
     const Type type;
     const std::size_t size;
-    const void* data;
+    void* data;
 
-    constexpr LateUpgradeAddData(const Type newType, const std::size_t newSize, const void* newData = nullptr) noexcept:
+    constexpr LateUpgradeAddData(const Type newType, const std::size_t newSize, void* newData = nullptr) noexcept:
         type(newType),
         size(newSize),
         data(newData) {

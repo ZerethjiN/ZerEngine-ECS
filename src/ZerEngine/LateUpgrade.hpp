@@ -46,8 +46,13 @@ struct LateUpgradeDelEntInfo final {
 class LateUpgrade final {
 public:
     ~LateUpgrade() noexcept {
-        for (auto* obj: objTransfert) {
-            free(obj);
+        for (auto& info: infosAddEnt) {
+            for (auto& arg: info.args) {
+                free(arg.data);
+            }
+        }
+        for (auto& info: infosAddComp) {
+            free(info.args.data);
         }
     }
 
@@ -55,11 +60,9 @@ public:
     inline Ent newEnt(Registry& reg, const Args&... args) noexcept {
         const std::lock_guard<std::mutex> lock(mtx);
         Ent ent = reg.getEntToken();
-        if constexpr (sizeof...(Args) > 0) {
-            reg.fillDestructorsRec<Args...>();
-        }
         infosAddEnt.emplace_back(ent);
         if constexpr (sizeof...(Args) > 0) {
+            reg.fillDestructorsRec<Args...>();
             std::size_t size = rowSize<Args...>();
             newEntRec(infosAddEnt.back(), args...);
         }
@@ -70,17 +73,14 @@ public:
     inline void add(Registry& reg, const Ent ent, const Arg& arg) noexcept {
         const std::lock_guard<std::mutex> lock(mtx);
         reg.fillDestructorsRec<Arg>();
-        void* buffer = malloc(sizeof(Arg));
-        objTransfert.push_back(buffer);
-        new (buffer) Arg(arg);
-        infosAddComp.emplace_back(
+        new (infosAddComp.emplace_back(
             ent,
             LateUpgradeAddData{
                 typeid(Arg).hash_code(),
                 sizeof(Arg),
-                buffer
+                malloc(sizeof(Arg))
             }
-        );
+        ).args.data) Arg(arg);
     }
 
     template <typename Arg>
@@ -108,31 +108,30 @@ public:
         }
 
         for (auto& info: infosAddEnt) {
-            reg.newEntLate(info.ent, info.args);
+            reg.newEnt(info.ent, info.args);
+            for (auto& arg: info.args) {
+                free(arg.data);
+            }
         }
 
         for (auto& info: infosDelComp) {
-            reg.delLate(info.ent, info.args);
+            reg.del(info.ent, info.args);
         }
         
         for (auto& info: infosAddComp) {
-            reg.addLate(info.ent, info.args);
+            reg.add(info.ent, info.args);
+            free(info.args.data);
         }
 
         infosAddEnt.clear();
         infosAddComp.clear();
         infosDelComp.clear();
         infosDelEnt.clear();
-
-        for (auto* obj: objTransfert) {
-            free(obj);
-        }
-        objTransfert.clear();
     }
 
 private:
     template <typename Arg, typename... Args>
-    [[nodiscard]] static consteval std::size_t rowSize() {
+    [[nodiscard]] static consteval std::size_t rowSize() noexcept {
         if constexpr (sizeof...(Args) > 0) {
             return sizeof(Arg) + rowSize<Args...>();
         }
@@ -140,15 +139,12 @@ private:
     }
 
     template <typename Arg, typename... Args>
-    constexpr void newEntRec(LateUpgradeAddEntInfo& info, const Arg& arg, const Args&... args) {
-        void* buffer = malloc(sizeof(Arg));
-        new (buffer) Arg(arg);
-        objTransfert.push_back(buffer);
-        info.args.emplace_back(
+    constexpr void newEntRec(LateUpgradeAddEntInfo& info, const Arg& arg, const Args&... args) noexcept {
+        new (info.args.emplace_back(
             typeid(Arg).hash_code(),
             sizeof(Arg),
-            buffer
-        );
+            malloc(sizeof(Arg))
+        ).data) Arg(arg);
         if constexpr (sizeof...(Args) > 0) {
             newEntRec(info, args...);
         }
@@ -159,6 +155,5 @@ private:
     std::vector<LateUpgradeAddInfo> infosAddComp;
     std::vector<LateUpgradeDelEntInfo> infosDelEnt;
     std::vector<LateUpgradeDelCompInfo> infosDelComp;
-    std::vector<void*> objTransfert;
     std::mutex mtx;
 };
