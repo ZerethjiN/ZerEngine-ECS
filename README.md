@@ -11,6 +11,7 @@ A simple ECS logic core.
 
 # Code Example
 ```c++
+#define ZERENGINE_USE_RENDER_THREAD
 #include <ZerEngine/ZerEngine.hpp>
 
 // New FakeTime resource.
@@ -33,7 +34,7 @@ struct Vel {
 };
 
 // Initialization system executed only once at startup.
-void initPos(zre::World& world) {
+void initPos(World& world) {
     for (float i = 0; i < 5; i++) {
         world.newEnt(
             Pos { i + 10.f, i + 20.f },
@@ -43,8 +44,8 @@ void initPos(zre::World& world) {
 }
 
 // Systems executed on each frame.
-void movePosSys(zre::World& world) {
-    auto positions = world.query<Pos, Vel>();
+void movePosSys(World& world) {
+    auto positions = world.view<Pos, Vel>();
     const auto& time = world.getRes<FakeTime>();
 
     positions.each([&](auto& pos, const auto& vel) {
@@ -53,23 +54,23 @@ void movePosSys(zre::World& world) {
     });
 }
 
-void secondThreadedSys(zre::Wordl& world) {
+void secondThreadedSys(World& world) {
     /* My second thread */
 }
 
-void stopRunSys(zre::World& world) {
+void stopRunSys(World& world) {
     world.stopRun();
 }
 
 // Render System
-void renderCopySys(zre::World& world, zre::priv::LiteRegistry& reg) noexcept {
+void renderCopySys(World& world, LiteRegistry& reg) noexcept {
     reg.clear();
 
-    reg.copyFromQuery(world.query</*Sprite, Transform, ...*/>());
+    reg.copyFromQuery(world.view</*Sprite, Transform, ...*/>());
 }
 
-void renderSys(zre::World& world, zre::priv::LiteRegistry& renderReg) noexcept {
-    auto sprts = renderReg.query</*Sprite, Transform, ...*/>();
+void renderSys(World& world, LiteRegistry& renderReg) noexcept {
+    auto sprts = renderReg.view</*Sprite, Transform, ...*/>();
     
     sprts.each([&](/*auto& Sprite, auto& Transform, ...*/) {
         /* My Render */
@@ -78,7 +79,7 @@ void renderSys(zre::World& world, zre::priv::LiteRegistry& renderReg) noexcept {
 
 int main() {
     // Our application.
-    zre::ZerEngine()
+    ZerEngine()
         .addRes<FakeTime>()
         .addStartSys(initPos)
         .addSys(movePosSys, secondThreadedSys)
