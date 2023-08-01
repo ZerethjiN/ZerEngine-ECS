@@ -38,12 +38,12 @@ public:
 
     template <typename... Comps, typename... Filters, typename... Excludes>
     [[nodiscard]] constexpr const View<Comps...> view(const With<Filters...> filters = {}, const Without<Excludes...> excludes = {}) {
-        return reg.view<Comps...>(filters, excludes);
+        return reg.view<Comps...>(sys, filters, excludes);
     }
 
     template <typename... Comps, typename... Filters, typename... Excludes>
     [[nodiscard]] constexpr const View<Comps...> view(const Without<Excludes...> excludes, const With<Filters...> filters = {}) {
-        return reg.view<Comps...>(filters, excludes);
+        return reg.view<Comps...>(sys, filters, excludes);
     }
 
     template <typename... Comps>

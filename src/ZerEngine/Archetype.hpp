@@ -276,6 +276,7 @@ private:
         return (!types.contains(typeid(Ts).hash_code()) && ...);
     }
 
+public:
     template <typename T>
     [[nodiscard]] constexpr T& getAt(const std::size_t idx) const noexcept {
         return reinterpret_cast<T&>(static_cast<std::byte*>(datas[idx >> shiftMultiplier])[(rowSize * (idx & maxCapacity)) + types.at(typeid(T).hash_code()).offset]);

@@ -125,7 +125,7 @@ public:
         }
     }
 
-private:
+public:
     std::vector<void(*)(World&)> startSystems;
     std::vector<std::pair<bool(*)(World&), void(*)(World&)>> mainSystems;
     std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> systems;

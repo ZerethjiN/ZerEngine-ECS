@@ -6,6 +6,7 @@
 #include "Utils.hpp"
 #include "Archetype.hpp"
 #include "View.hpp"
+#include "Sys.hpp"
 
 class Registry final {
 public:
@@ -168,7 +169,7 @@ public:
     }
 
     template <typename... Comps, typename... Filters, typename... Excludes>
-    [[nodiscard]] inline const View<Comps...> view(const With<Filters...>& with = {}, const Without<Excludes...>& without = {}) const noexcept {
+    [[nodiscard]] inline const View<Comps...> view(Sys& sys, const With<Filters...>& with = {}, const Without<Excludes...>& without = {}) const noexcept {
         std::vector<const Archetype*> viewArchs;
         const constexpr std::size_t minlength = sizeof...(Comps) + sizeof...(Filters) - sizeof...(Excludes);
         for (const auto& pair: archsBySize) {
@@ -180,7 +181,7 @@ public:
                 }
             }
         }
-        return {viewArchs};
+        return {viewArchs, sys};
     }
 
 public:
