@@ -60,11 +60,14 @@ public:
     inline Ent newEnt(Registry& reg, const Args&... args) noexcept {
         const std::lock_guard<std::mutex> lock(mtx);
         Ent ent = reg.getEntToken();
-        infosAddEnt.emplace_back(ent);
+        auto& infoAddEnt = infosAddEnt.emplace_back(ent);
         if constexpr (sizeof...(Args) > 0) {
             reg.fillDestructorsRec<Args...>();
-            std::size_t size = rowSize<Args...>();
-            newEntRec(infosAddEnt.back(), args...);
+            (new (infoAddEnt.args.emplace_back(
+                typeid(Args).hash_code(),
+                sizeof(Args),
+                malloc(sizeof(Args))
+            ).data) Args(args), ...);
         }
         return ent;
     }
@@ -127,27 +130,6 @@ public:
         infosAddComp.clear();
         infosDelComp.clear();
         infosDelEnt.clear();
-    }
-
-private:
-    template <typename Arg, typename... Args>
-    [[nodiscard]] static consteval std::size_t rowSize() noexcept {
-        if constexpr (sizeof...(Args) > 0) {
-            return sizeof(Arg) + rowSize<Args...>();
-        }
-        return sizeof(Arg);
-    }
-
-    template <typename Arg, typename... Args>
-    constexpr void newEntRec(LateUpgradeAddEntInfo& info, const Arg& arg, const Args&... args) noexcept {
-        new (info.args.emplace_back(
-            typeid(Arg).hash_code(),
-            sizeof(Arg),
-            malloc(sizeof(Arg))
-        ).data) Arg(arg);
-        if constexpr (sizeof...(Args) > 0) {
-            newEntRec(info, args...);
-        }
     }
 
 private:

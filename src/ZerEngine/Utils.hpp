@@ -21,13 +21,13 @@ template <typename... Filters>
 struct With final {};
 
 template <typename... Filters>
-constexpr With<Filters...> with;
+constinit With<Filters...> with;
 
 template <typename... Excludes>
 struct Without final {};
 
 template <typename... Excludes>
-constexpr Without<Excludes...> without;
+constinit Without<Excludes...> without;
 
 struct TypeInfos final {
     std::size_t size;

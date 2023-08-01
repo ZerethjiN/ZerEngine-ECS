@@ -171,9 +171,9 @@ public:
     [[nodiscard]] inline const View<Comps...> view(const With<Filters...>& with = {}, const Without<Excludes...>& without = {}) const noexcept {
         std::vector<const Archetype*> viewArchs;
         const constexpr std::size_t minlength = sizeof...(Comps) + sizeof...(Filters) - sizeof...(Excludes);
-        for (auto& pair: archsBySize) {
+        for (const auto& pair: archsBySize) {
             if (pair.first >= minlength) {
-                for (auto* arch: pair.second) {
+                for (const auto* arch: pair.second) {
                     if (arch->isPartialyCompatible<Comps...>(with, without)) {
                         viewArchs.push_back(arch);
                     }

@@ -77,7 +77,7 @@ public:
                 datas.emplace_back(malloc(rowSize));
             }
         }
-        auto idx = entIdx.size();
+        const auto idx = entIdx.size();
         entIdx.emplace(ent, idx);
         idxEnt.emplace(idx, ent);
         auto* data = static_cast<std::byte*>(datas[idx >> shiftMultiplier]) + (rowSize * (idx & maxCapacity));
@@ -98,13 +98,13 @@ public:
                 datas.emplace_back(malloc(rowSize));
             }
         }
-        auto idx = entIdx.size();
+        const auto idx = entIdx.size();
         entIdx.emplace(ent, idx);
         idxEnt.emplace(idx, ent);
 
         auto* data = static_cast<std::byte*>(datas[idx >> shiftMultiplier]) + (rowSize * (idx & maxCapacity));
 
-        auto othIdx = oldArch.entIdx.at(ent);
+        const auto othIdx = oldArch.entIdx.at(ent);
         const auto* othData = static_cast<const std::byte*>(oldArch.datas[othIdx >> oldArch.shiftMultiplier]) + (oldArch.rowSize * (othIdx & oldArch.maxCapacity));
 
         for (const auto& pairTypes: oldArch.types) {
@@ -132,13 +132,13 @@ public:
                 datas.emplace_back(malloc(rowSize));
             }
         }
-        auto idx = entIdx.size();
+        const auto idx = entIdx.size();
         entIdx.emplace(ent, idx);
         idxEnt.emplace(idx, ent);
 
         auto* data = static_cast<std::byte*>(datas[idx >> shiftMultiplier]) + (rowSize * (idx & maxCapacity));
 
-        auto othIdx = oldArch.entIdx.at(ent);
+        const auto othIdx = oldArch.entIdx.at(ent);
         const auto* othData = static_cast<const std::byte*>(oldArch.datas[othIdx >> oldArch.shiftMultiplier]) + (oldArch.rowSize * (othIdx & oldArch.maxCapacity));
 
         for (const auto& pairTypes: oldArch.types) {
@@ -227,9 +227,9 @@ public:
     }
 
     inline void destroy(const Ent ent) noexcept {
-        auto oldIdx = entIdx.at(ent);
-        auto lastIdx = entIdx.size() - 1;
-        auto lastEnt = idxEnt.at(lastIdx);
+        const auto oldIdx = entIdx.at(ent);
+        const auto lastIdx = entIdx.size() - 1;
+        const auto lastEnt = idxEnt.at(lastIdx);
         memcpy(
             static_cast<std::byte*>(datas[oldIdx >> shiftMultiplier]) + (rowSize * (oldIdx & maxCapacity)),
             static_cast<const std::byte*>(datas[lastIdx >> shiftMultiplier]) + (rowSize * (lastIdx & maxCapacity)),
@@ -266,26 +266,14 @@ public:
     }
 
 private:
-    template <typename T, typename... Ts>
+    template <typename... Ts>
     [[nodiscard]] constexpr bool isCompatibleRec() const noexcept {
-        if (types.contains(typeid(T).hash_code())) {
-            if constexpr (sizeof...(Ts) > 0)
-                return isCompatibleRec<Ts...>();
-            else
-                return true;
-        }
-        return false;
+        return (types.contains(typeid(Ts).hash_code()) && ...);
     }
 
-    template <typename T, typename... Ts>
+    template <typename... Ts>
     [[nodiscard]] constexpr bool isExcludeRec() const noexcept {
-        if (!types.contains(typeid(T).hash_code())) {
-            if constexpr (sizeof...(Ts) > 0)
-                return isExcludeRec<Ts...>();
-            else
-                return true;
-        }
-        return false;
+        return (!types.contains(typeid(Ts).hash_code()) && ...);
     }
 
     template <typename T>
@@ -295,7 +283,7 @@ private:
 
 public:
     std::size_t rowSize = 0;
-    std::size_t maxCapacity = 1;
+    std::size_t maxCapacity = 0;
     std::size_t shiftMultiplier = 0;
     std::unordered_map<Type, TypeInfos> types;
     std::unordered_map<Ent, std::size_t> entIdx;
