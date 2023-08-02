@@ -49,7 +49,7 @@ public:
         systems.emplace_back(
             std::piecewise_construct,
             std::forward_as_tuple(nullptr),
-            std::forward_as_tuple(std::vector<void(*)(World&)>{args...})
+            std::forward_as_tuple<std::vector<void(*)(World&)>>({args...})
         );
     }
 
@@ -58,7 +58,7 @@ public:
         systems.emplace_back(
             std::piecewise_construct,
             std::forward_as_tuple(cond),
-            std::forward_as_tuple(std::vector<void(*)(World&)>{args...})
+            std::forward_as_tuple<std::vector<void(*)(World&)>>({args...})
         );
     }
 
@@ -67,7 +67,7 @@ public:
         lateSystems.emplace_back(
             std::piecewise_construct,
             std::forward_as_tuple(nullptr),
-            std::forward_as_tuple(std::vector<void(*)(World&)>{args...})
+            std::forward_as_tuple<std::vector<void(*)(World&)>>({args...})
         );
     }
 
@@ -76,7 +76,7 @@ public:
         lateSystems.emplace_back(
             std::piecewise_construct,
             std::forward_as_tuple(cond),
-            std::forward_as_tuple(std::vector<void(*)(World&)>{args...})
+            std::forward_as_tuple<std::vector<void(*)(World&)>>({args...})
         );
     }
 

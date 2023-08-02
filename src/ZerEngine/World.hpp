@@ -11,9 +11,9 @@ public:
         sys(*this) {
     }
 
-    template <typename T>
+    template <typename... Ts>
     [[nodiscard]] constexpr bool has(const Ent ent) const noexcept {
-        return reg.has<T>(ent);
+        return reg.has<Ts...>(ent);
     }
 
     template <typename T>

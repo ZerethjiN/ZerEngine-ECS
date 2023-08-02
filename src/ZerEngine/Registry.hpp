@@ -72,9 +72,9 @@ public:
         return entArch.at(ent)->get<T>(ent);
     } 
 
-    template <typename T>
+    template <typename... Ts>
     [[nodiscard]] constexpr bool has(const Ent ent) const noexcept {
-        return entArch.at(ent)->types.contains(typeid(T).hash_code());
+        return (entArch.at(ent)->types.contains(typeid(Ts).hash_code()) && ...);
     }
 
     inline void add(const Ent ent, const LateUpgradeAddData& comp) noexcept {

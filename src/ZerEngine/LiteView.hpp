@@ -19,6 +19,18 @@
             }
         }
 
+        [[nodiscard]] constexpr bool empty() const noexcept {
+            if (archs.empty()) {
+                return true;
+            }
+            for (const auto* arch: archs) {
+                if (arch->size() > 0) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         [[nodiscard]] constexpr std::size_t size() const noexcept {
             std::size_t newSize = 0;
             for (const auto* arch: archs) {

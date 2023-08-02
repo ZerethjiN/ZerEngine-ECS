@@ -64,26 +64,14 @@
         }
 
     private:
-        template <typename T, typename... Ts>
+        template <typename... Ts>
         [[nodiscard]] constexpr bool isCompatibleRec() const noexcept {
-            if (types.contains(typeid(T).hash_code())) {
-                if constexpr (sizeof...(Ts) > 0)
-                    return isCompatibleRec<Ts...>();
-                else
-                    return true;
-            }
-            return false;
+            return (types.contains(typeid(Ts).hash_code()) && ...);
         }
 
-        template <typename T, typename... Ts>
+        template <typename... Ts>
         [[nodiscard]] constexpr bool isExcludeRec() const noexcept {
-            if (!types.contains(typeid(T).hash_code())) {
-                if constexpr (sizeof...(Ts) > 0)
-                    return isExcludeRec<Ts...>();
-                else
-                    return true;
-            }
-            return false;
+            return (!types.contains(typeid(Ts).hash_code()) && ...);
         }
 
         template <typename T>

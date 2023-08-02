@@ -14,7 +14,7 @@ class World;
 class IFuncObj {
 public:
     virtual constexpr ~IFuncObj() noexcept = default;
-    virtual void each() const noexcept = 0;
+    virtual inline void each() const noexcept = 0;
 };
 
 template <typename Func, typename... Comps>
@@ -24,12 +24,15 @@ public:
         func(newFunc), arch(newArch) {
     }
 
-    void each() const noexcept override final {
-        for (const auto& pair: arch->entIdx) {
-            if constexpr (std::is_invocable_v<Func, Comps&...>)
+    inline void each() const noexcept override final {
+        if constexpr (std::is_invocable_v<Func, Comps&...>) {
+            for (const auto& pair: arch->entIdx) {
                 std::apply(func, std::forward_as_tuple(arch->getAt<Comps>(pair.second)...));
-            else if constexpr (std::is_invocable_v<Func, Ent, Comps&...>)
+            }
+        } else if constexpr (std::is_invocable_v<Func, Ent, Comps&...>) {
+            for (const auto& pair: arch->entIdx) {
                 std::apply(func, std::forward_as_tuple(pair.first, arch->getAt<Comps>(pair.second)...));
+            }
         }
     }
 
@@ -59,7 +62,7 @@ public:
     }
 
     inline void addTask(void(*const func)(World&)) noexcept {
-        std::lock_guard<std::mutex> lock(mtx);
+        const std::lock_guard<std::mutex> lock(mtx);
         tasks.emplace_back(func);
     }
 
@@ -69,7 +72,7 @@ public:
 
     template <typename Func, typename... Comps>
     inline void addQueryTask(const Func& newFunc, const Archetype* newArch) noexcept {
-        std::lock_guard<std::mutex> lock(mtx);
+        const std::lock_guard<std::mutex> lock(mtx);
         queryTasks.emplace_back(new FuncObj<Func, Comps...>(newFunc, newArch));
     }
 

@@ -27,7 +27,7 @@ public:
             sys.threadpool.waitQueryTask();
         } else {
             for (const auto* arch: archs) {
-                arch->template each<Func, Ts...>(func);
+                arch->each<Func, Ts...>(func);
             }
         }
     }

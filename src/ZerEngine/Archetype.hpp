@@ -156,16 +156,19 @@ public:
 
     template <typename T>
     [[nodiscard]] constexpr T& get(const Ent ent) noexcept {
-        return static_cast<T&>(static_cast<std::byte*>(datas[entIdx.at(ent) >> shiftMultiplier])[(rowSize * (entIdx.at(ent) & maxCapacity)) + types.at(typeid(T).hash_code()).offset]);
+        const auto idx = entIdx.at(ent);
+        return static_cast<T&>(static_cast<std::byte*>(datas[idx >> shiftMultiplier])[(rowSize * (idx & maxCapacity)) + types.at(typeid(T).hash_code()).offset]);
     }
 
     template <typename T>
     [[nodiscard]] constexpr const T& get(const Ent ent) const noexcept {
-        return static_cast<T&>(static_cast<std::byte*>(datas[entIdx.at(ent) >> shiftMultiplier])[(rowSize * (entIdx.at(ent) & maxCapacity)) + types.at(typeid(T).hash_code()).offset]);
+        const auto idx = entIdx.at(ent);
+        return static_cast<T&>(static_cast<std::byte*>(datas[idx >> shiftMultiplier])[(rowSize * (idx & maxCapacity)) + types.at(typeid(T).hash_code()).offset]);
     }
 
     [[nodiscard]] constexpr void* getPtr(const Ent ent, const Type type) const noexcept {
-        return static_cast<void*>(static_cast<std::byte*>(datas[entIdx.at(ent) >> shiftMultiplier]) + (rowSize * (entIdx.at(ent) & maxCapacity)) + types.at(type).offset);
+        const auto idx = entIdx.at(ent);
+        return static_cast<void*>(static_cast<std::byte*>(datas[idx >> shiftMultiplier]) + (rowSize * (idx & maxCapacity)) + types.at(type).offset);
     }
 
     [[nodiscard]] constexpr std::size_t size() const noexcept {
@@ -244,11 +247,10 @@ public:
         if (!(entIdx.size() & maxCapacity)) {
             if (pagesize >= (rowSize << 1)) {
                 aligned_free(datas.back());
-                datas.pop_back();
             } else {
                 free(datas.back());
-                datas.pop_back();
             }
+            datas.pop_back();
         }
     }
 
