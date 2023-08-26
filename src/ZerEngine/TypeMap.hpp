@@ -33,7 +33,7 @@ public:
         typeMap.erase(typeid(T).hash_code());
     }
 
-    constexpr void clear() noexcept {
+    inline void clear() noexcept {
         typeMap.clear();
     }
 

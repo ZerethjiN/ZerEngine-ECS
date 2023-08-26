@@ -125,7 +125,7 @@ public:
             reg.add(info.ent, info.args);
             free(info.args.data);
         }
-
+ 
         infosAddEnt.clear();
         infosAddComp.clear();
         infosDelComp.clear();

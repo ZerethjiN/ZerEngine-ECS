@@ -36,14 +36,34 @@ public:
         return res.get<T>();
     }
 
-    template <typename... Comps, typename... Filters, typename... Excludes>
-    [[nodiscard]] constexpr const View<Comps...> view(const With<Filters...> filters = {}, const Without<Excludes...> excludes = {}) {
-        return reg.view<Comps...>(sys, filters, excludes);
+    template <typename... Comps, typename... Filters, typename... Excludes, typename... Optionals>
+    [[nodiscard]] constexpr const View<Comps...> view(const With<Filters...> filters = {}, const Without<Excludes...> excludes = {}, const Optional<Optionals...> optionals = {}) {
+        return reg.view<Comps...>(sys, filters, excludes, optionals);
     }
 
-    template <typename... Comps, typename... Filters, typename... Excludes>
-    [[nodiscard]] constexpr const View<Comps...> view(const Without<Excludes...> excludes, const With<Filters...> filters = {}) {
-        return reg.view<Comps...>(sys, filters, excludes);
+    template <typename... Comps, typename... Filters, typename... Excludes, typename... Optionals>
+    [[nodiscard]] constexpr const View<Comps...> view(const With<Filters...> filters, const Optional<Optionals...> optionals, const Without<Excludes...> excludes = {}) {
+        return reg.view<Comps...>(sys, filters, excludes, optionals);
+    }
+
+    template <typename... Comps, typename... Filters, typename... Excludes, typename... Optionals>
+    [[nodiscard]] constexpr const View<Comps...> view(const Without<Excludes...> excludes, const With<Filters...> filters = {}, const Optional<Optionals...> optionals = {}) {
+        return reg.view<Comps...>(sys, filters, excludes, optionals);
+    }
+
+    template <typename... Comps, typename... Filters, typename... Excludes, typename... Optionals>
+    [[nodiscard]] constexpr const View<Comps...> view(const Without<Excludes...> excludes, const Optional<Optionals...> optionals, const With<Filters...> filters = {}) {
+        return reg.view<Comps...>(sys, filters, excludes, optionals);
+    }
+
+    template <typename... Comps, typename... Filters, typename... Excludes, typename... Optionals>
+    [[nodiscard]] constexpr const View<Comps...> view(const Optional<Optionals...> optionals, const With<Filters...> filters = {}, const Without<Excludes...> excludes = {}) {
+        return reg.view<Comps...>(sys, filters, excludes, optionals);
+    }
+
+    template <typename... Comps, typename... Filters, typename... Excludes, typename... Optionals>
+    [[nodiscard]] constexpr const View<Comps...> view(const Optional<Optionals...> optionals, const Without<Excludes...> excludes, const With<Filters...> filters = {}) {
+        return reg.view<Comps...>(sys, filters, excludes, optionals);
     }
 
     template <typename... Comps>
@@ -67,7 +87,7 @@ public:
         lateUpgrade.del<Old>(ent);
     }
 
-    constexpr void destroy(const Ent ent) noexcept {
+    inline void destroy(const Ent ent) noexcept {
         lateUpgrade.destroy(ent);
     }
 
@@ -75,7 +95,7 @@ public:
         isRunning = !val;
     }
 
-    constexpr void upgrade() noexcept {
+    inline void upgrade() noexcept {
         lateUpgrade.upgrade(reg);
     }
 

@@ -19,7 +19,7 @@ public:
         }
     }
 
-    constexpr void create(const std::vector<LateUpgradeAddData>& comps) noexcept {
+    inline void create(const std::vector<LateUpgradeAddData>& comps) noexcept {
         types.reserve(comps.size());
         for (const auto& comp: comps) {
             types.emplace(
@@ -30,12 +30,12 @@ public:
             rowSize += comp.size;
         }
         if (pagesize >= (rowSize << 1)) {
-            maxCapacity = (pagesize >> static_cast<std::size_t>(std::bit_width(rowSize))) -1;
-            shiftMultiplier = static_cast<std::size_t>(std::bit_width(maxCapacity));
+            maxCapacity = (pagesize >> std::bit_width(rowSize)) -1;
+            shiftMultiplier = std::bit_width(maxCapacity);
         }
     }
 
-    constexpr void createWith(const Archetype& oldArch, const LateUpgradeAddData& comp) noexcept {
+    inline void createWith(const Archetype& oldArch, const LateUpgradeAddData& comp) noexcept {
         types = oldArch.types;
         rowSize = oldArch.rowSize;
         if (!types.contains(comp.type)) {
@@ -47,8 +47,8 @@ public:
             rowSize += comp.size;
         }
         if (pagesize >= (rowSize << 1)) {
-            maxCapacity = (pagesize >> static_cast<std::size_t>(std::bit_width(rowSize))) -1;
-            shiftMultiplier = static_cast<std::size_t>(std::bit_width(maxCapacity));
+            maxCapacity = (pagesize >> std::bit_width(rowSize)) -1;
+            shiftMultiplier = std::bit_width(maxCapacity);
         }
     }
 
@@ -64,12 +64,12 @@ public:
             }
         }
         if (pagesize >= (rowSize << 1)) {
-            maxCapacity = (pagesize >> static_cast<std::size_t>(std::bit_width(rowSize))) -1;
-            shiftMultiplier = static_cast<std::size_t>(std::bit_width(maxCapacity));
+            maxCapacity = (pagesize >> std::bit_width(rowSize)) -1;
+            shiftMultiplier = std::bit_width(maxCapacity);
         }
     }
 
-    constexpr void newEnt(const Ent ent, const std::vector<LateUpgradeAddData>& comps) noexcept {
+    inline void newEnt(const Ent ent, const std::vector<LateUpgradeAddData>& comps) noexcept {
         if (!(entIdx.size() & maxCapacity)) {
             if (pagesize >= (rowSize << 1)) {
                 datas.emplace_back(aligned_malloc(pagesize, pagesize));
@@ -157,7 +157,7 @@ public:
     template <typename T>
     [[nodiscard]] constexpr T& get(const Ent ent) noexcept {
         const auto idx = entIdx.at(ent);
-        return static_cast<T&>(static_cast<std::byte*>(datas[idx >> shiftMultiplier])[(rowSize * (idx & maxCapacity)) + types.at(typeid(T).hash_code()).offset]);
+        return reinterpret_cast<T&>(static_cast<std::byte*>(datas[idx >> shiftMultiplier])[(rowSize * (idx & maxCapacity)) + types.at(typeid(T).hash_code()).offset]);
     }
 
     template <typename T>
@@ -166,16 +166,16 @@ public:
         return static_cast<T&>(static_cast<std::byte*>(datas[idx >> shiftMultiplier])[(rowSize * (idx & maxCapacity)) + types.at(typeid(T).hash_code()).offset]);
     }
 
-    [[nodiscard]] constexpr void* getPtr(const Ent ent, const Type type) const noexcept {
+    [[nodiscard]] inline void* getPtr(const Ent ent, const Type type) const noexcept {
         const auto idx = entIdx.at(ent);
         return static_cast<void*>(static_cast<std::byte*>(datas[idx >> shiftMultiplier]) + (rowSize * (idx & maxCapacity)) + types.at(type).offset);
     }
 
-    [[nodiscard]] constexpr std::size_t size() const noexcept {
+    [[nodiscard]] inline std::size_t size() const noexcept {
         return entIdx.size();
     }
 
-    [[nodiscard]] constexpr bool isTotalyCompatibleLate(const std::vector<LateUpgradeAddData>& comps) const noexcept {
+    [[nodiscard]] inline bool isTotalyCompatibleLate(const std::vector<LateUpgradeAddData>& comps) const noexcept {
         if (comps.size() != types.size()) {
             return false;
         }
@@ -214,8 +214,8 @@ public:
         return true;
     }
 
-    template <typename... Comps, typename... Filters, typename... Excludes>
-    [[nodiscard]] constexpr bool isPartialyCompatible(const With<Filters...>& with = {}, const Without<Excludes...>& without = {}) const noexcept {
+    template <typename... Comps, typename... Filters, typename... Excludes, typename... Optionals>
+    [[nodiscard]] constexpr bool isPartialyCompatible([[maybe_unused]] const With<Filters...>& with = {}, [[maybe_unused]] const Without<Excludes...>& without = {}, [[maybe_unused]] const Optional<Optionals...>& optional = {}) const noexcept {
         if constexpr (sizeof...(Comps) + sizeof...(Filters) > 0) {
             if (!isCompatibleRec<Comps..., Filters...>()) {
                 return false;
@@ -223,6 +223,11 @@ public:
         }
         if constexpr (sizeof...(Excludes) > 0) {
             if (!isExcludeRec<Excludes...>()) {
+                return false;
+            }
+        }
+        if constexpr (sizeof...(Optionals) > 0) {
+            if (!isOptionalRec<Optionals...>()) {
                 return false;
             }
         }
@@ -271,6 +276,11 @@ private:
     template <typename... Ts>
     [[nodiscard]] constexpr bool isCompatibleRec() const noexcept {
         return (types.contains(typeid(Ts).hash_code()) && ...);
+    }
+
+    template <typename... Ts>
+    [[nodiscard]] constexpr bool isOptionalRec() const noexcept {
+        return (types.contains(typeid(Ts).hash_code()) || ...);
     }
 
     template <typename... Ts>

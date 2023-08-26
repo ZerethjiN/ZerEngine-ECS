@@ -30,7 +30,13 @@ public:
         world.sys.addSys(args...);
         return *this;
     }
-
+/*
+    template <typename... Args>
+    [[nodiscard]] constexpr ZerEngine& addSys(const Args&... args, const After& after) noexcept {
+        world.sys.addSys(args...);
+        return *this;
+    }
+*/
     template <typename... Args>
     [[nodiscard]] constexpr ZerEngine& addCondSys(bool(*const cond)(World&), const Args&... args) noexcept {
         world.sys.addCondSys(cond, args...);
@@ -61,7 +67,7 @@ public:
     }
 #endif
 
-    constexpr void run() noexcept {
+    inline void run() noexcept {
         world.isRunning = true;
         world.sys.start(world);
         while (world.isRunning) {

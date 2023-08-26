@@ -29,6 +29,12 @@ struct Without final {};
 template <typename... Excludes>
 constinit Without<Excludes...> without;
 
+template <typename... Optionals>
+struct Optional final {};
+
+template <typename... Optionals>
+constinit Optional<Optionals...> optional;
+
 struct TypeInfos final {
     std::size_t size;
     std::size_t offset;
@@ -60,3 +66,22 @@ struct LateUpgradeDelCompData final {
         size(newSize) {
     }
 };
+/*
+struct After {
+public:
+    inline After(const std::initializer_list<void(*)(World&)>& list) noexcept:
+        syss(list) {
+    }
+
+    [[nodiscard]] inline std::vector<void(*)(World&)>::const_iterator cbegin() const noexcept {
+        return syss.cbegin();
+    }
+
+    [[nodiscard]] inline std::vector<void(*)(World&)>::const_iterator cend() const noexcept {
+        return syss.cbegin();
+    }
+
+private:
+    const std::vector<void(*)(World&)> syss;
+};
+*/

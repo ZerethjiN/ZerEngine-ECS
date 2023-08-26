@@ -8,6 +8,8 @@
 #include "View.hpp"
 #include "Sys.hpp"
 
+#include <type_traits>
+
 class Registry final {
 public:
     inline ~Registry() noexcept {
@@ -168,14 +170,14 @@ public:
         entTokens.push_back(ent);
     }
 
-    template <typename... Comps, typename... Filters, typename... Excludes>
-    [[nodiscard]] inline const View<Comps...> view(Sys& sys, const With<Filters...>& with = {}, const Without<Excludes...>& without = {}) const noexcept {
+    template <typename... Comps, typename... Filters, typename... Excludes, typename... Optionals>
+    [[nodiscard]] inline const View<Comps...> view(Sys& sys, const With<Filters...>& with = {}, const Without<Excludes...>& without = {}, const Optional<Optionals...>& optional = {}) const noexcept {
         std::vector<const Archetype*> viewArchs;
         const constexpr std::size_t minlength = sizeof...(Comps) + sizeof...(Filters) - sizeof...(Excludes);
         for (const auto& pair: archsBySize) {
             if (pair.first >= minlength) {
                 for (const auto* arch: pair.second) {
-                    if (arch->isPartialyCompatible<Comps...>(with, without)) {
+                    if (arch->isPartialyCompatible<Comps...>(with, without, optional)) {
                         viewArchs.push_back(arch);
                     }
                 }
