@@ -11,70 +11,92 @@ A simple ECS logic core.
 
 # Code Example
 ```c++
-#define ZERENGINE_USE_RENDER_THREAD
-#include <ZerEngine/ZerEngine.hpp>
+import ZerengineCore;
 
 // New FakeTime resource.
-class FakeTime {
-public:
-    float fakeDelta() {
+struct FakeTime {
+    float fakeDelta() const {
         return 1;
     }
 };
 
 // Components declaration.
-struct Pos {
+struct Position {
     float x;
     float y;
 };
 
-struct Vel {
+struct Velocity {
     float x;
     float y;
+};
+
+struct Player {};
+
+struct PlayerDash {
+    float cooldown;
+    float curTime;
+    float dashSpeed;
+
+    bool canStopDash(float delta) {
+        curTime += delta;
+        return curTime >= cooldown;
+    }
 };
 
 // Initialization system executed only once at startup.
 void initPos(World& world) {
+    world.newEnt(
+        Player{},
+        Position{0.0f, 0.0f},
+        Velocity{0.0f, 0.0f}
+    );
+
     for (float i = 0; i < 5; i++) {
         world.newEnt(
-            Pos { i + 10.f, i + 20.f },
-            Vel { 10.f, 10.f }
+            Position{i + 10.f, i + 20.f},
+            Velocity{10.f, 10.f}
         );
     }
 }
 
 // Systems executed on each frame.
 void movePosSys(World& world) {
-    auto positions = world.view<Pos, Vel>();
-    const auto& time = world.getRes<FakeTime>();
+    auto positions = world.view<Position, const Velocity>();
+    auto [time] = world.getRes<const FakeTime>();
 
-    positions.each([&](auto& pos, const auto& vel) {
-        pos.x += vel.x * time.fakeDelta();
-        pos.y += vel.y * time.fakeDelta();
-    });
+    for (auto [_, position, velocity]: positions) {
+        position.x += velocity.x * time.fakeDelta();
+        position.y += velocity.y * time.fakeDelta();
+    }
 }
 
-void secondThreadedSys(World& world) {
-    /* My second thread */
+void playerActionSys(World& world) {
+    auto players = world.view(with<Player>, without<PlayerDash>);
+
+    for (auto [playerEnt]: players) {
+        if (/*Dash Button Pressed*/) {
+            world.add(playerEnt, PlayerDash{0.5f, 0.0f, 8.0f});
+        }
+    }
+}
+
+void playerDashSys(World& world) {
+    auto players = world.view<PlayerDash, Velocity>();
+    auto [time] = world.getRes<const FakeTime>();
+
+    for (auto [playerEnt, playerDash, velocity]: players) {
+        if (playerDash.canStopDash(time.fakeDelta())) {
+            world.del<PlayerDash>(playerEnt);
+            velocity.x = 0;
+        } else {
+            velocity.x += playerDash.dashSpeed;
+        }
+    }
 }
 
 void stopRunSys(World& world) {
     world.stopRun();
-}
-
-// Render System
-void renderCopySys(World& world, LiteRegistry& reg) noexcept {
-    reg.clear();
-
-    reg.copyFromQuery(world.view</*Sprite, Transform, ...*/>());
-}
-
-void renderSys(World& world, LiteRegistry& renderReg) noexcept {
-    auto sprts = renderReg.view</*Sprite, Transform, ...*/>();
-    
-    sprts.each([&](/*auto& Sprite, auto& Transform, ...*/) {
-        /* My Render */
-    });
 }
 
 int main() {
@@ -82,19 +104,23 @@ int main() {
     ZerEngine()
         .addRes<FakeTime>()
         .addStartSys(initPos)
-        .addSys(movePosSys, secondThreadedSys)
-        .addSys(stopRunSys)
+        .addSys(playerActionSys, playerDashSys) // Systems work at the same time
+        .addSys(movePosSys, stopRunSys)
         .addLateSys(/*...*/)
-        .addRenderCopy(renderCopySys)
-        .addRender(renderSys)
         .run();
 
     return 0;
 }
 ```
 
-# Integration
+# Integration (One File)
 Pass -I argument to the compiler to add the src directory to the include paths.
 ```c++
 #include <ZerEngine/ZerEngine.hpp>
+```
+
+# Integration (Modules)
+Precompile the modules in the ZerEngineModules folder and import them with:
+```c++
+import ZerengineCore;
 ```
