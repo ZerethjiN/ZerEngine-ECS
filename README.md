@@ -3,6 +3,7 @@
 
 A simple ECS logic core.
 
+* /!\ C++26 Minimum /!\
 * Cache Friendly Component managed by Archetypal.
 * Dynamic resource added by user and easy to access.
 * Simple implementation of components without inheritance.
@@ -116,7 +117,7 @@ int main() {
 # Integration (One File)
 Pass -I argument to the compiler to add the src directory to the include paths.
 ```c++
-#include <ZerEngine/ZerEngine.hpp>
+#include <ZerEngineOneFile/ZerEngine.hpp>
 ```
 
 # Integration (Modules)
