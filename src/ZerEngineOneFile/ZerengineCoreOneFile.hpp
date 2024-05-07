@@ -1144,12 +1144,17 @@ friend class World;
 friend class ZerEngine;
 private:
     Sys(World& world) noexcept:
-        threadpool(world, std::thread::hardware_concurrency() - 1)
+        threadpool(world, std::thread::hardware_concurrency() - 1),
+        isUseMultithreading(true)
     {
         srand(time(NULL));
     }
 
 private:
+    constexpr void useMultithreading(bool newVal) noexcept {
+        isUseMultithreading = newVal;
+    }
+
     constexpr void addStartSys(void(*const func)(World&)) noexcept {
         startSystems.emplace_back(func);
     }
@@ -1201,13 +1206,13 @@ private:
 
         for (const auto& funcs: threadedSystems) {
             if (funcs.first == nullptr || funcs.first(world)) {
-    #ifdef ZER_NO_MULTITHREADING
-                for (auto& func: funcs.second) {
-                    func(world);
+                if (!isUseMultithreading) {
+                    for (auto& func: funcs.second) {
+                        func(world);
+                    }
+                } else {
+                    threadpool.addTasks(funcs.second);
                 }
-    #else
-                threadpool.addTasks(funcs.second);
-    #endif
             }
         }
 
@@ -1230,6 +1235,7 @@ private:
     std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> threadedSystems;
     std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> lateSystems;
     ThreadPool threadpool;
+    bool isUseMultithreading;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -1522,6 +1528,11 @@ private:
 
 class ZerEngine final {
 public:
+    [[nodiscard]] constexpr ZerEngine& useMultithreading(bool newVal) noexcept {
+        world.sys.useMultithreading(newVal);
+        return *this;
+    }
+
     template <typename T, typename... Args> requires (std::copy_constructible<T>)
     [[nodiscard]] ZerEngine& addRes(Args&&... args) noexcept {
         world.res.emplace(typeid(T).hash_code(), std::make_any<T>(std::forward<Args>(args)...));

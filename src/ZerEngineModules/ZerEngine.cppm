@@ -9,6 +9,11 @@ import :World;
 
 export class ZerEngine final {
 public:
+    [[nodiscard]] constexpr ZerEngine& useMultithreading(bool newVal) noexcept {
+        world.sys.useMultithreading(newVal);
+        return *this;
+    }
+
     template <typename T, typename... Args> requires (std::copy_constructible<T>)
     [[nodiscard]] ZerEngine& addRes(Args&&... args) noexcept {
         world.res.emplace(typeid(T).hash_code(), std::make_any<T>(std::forward<Args>(args)...));

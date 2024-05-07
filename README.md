@@ -103,6 +103,7 @@ void stopRunSys(World& world) {
 int main() {
     // Our application.
     ZerEngine()
+        .useMultithreading(false) // <== optional
         .addRes<FakeTime>()
         .addStartSys(initPos)
         .addSys(playerActionSys, playerDashSys) // Systems work at the same time
