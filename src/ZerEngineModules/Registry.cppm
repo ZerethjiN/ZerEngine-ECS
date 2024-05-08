@@ -164,7 +164,7 @@ private:
         return true;
     }
 
-    [[nodiscard]] auto&& get(this auto&& self, const Ent ent, const Type type) noexcept(false) {
+    [[nodiscard]] auto&& get(this auto&& self, const Ent ent, const Type type) noexcept {
         return self.entArch.at(ent)->get(ent, type);
     }
 

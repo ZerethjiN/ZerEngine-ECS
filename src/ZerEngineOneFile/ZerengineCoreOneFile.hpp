@@ -619,7 +619,7 @@ private:
         return true;
     }
 
-    [[nodiscard]] auto&& get(this auto&& self, const Ent ent, const Type type) noexcept(false) {
+    [[nodiscard]] auto&& get(this auto&& self, const Ent ent, const Type type) noexcept {
         return self.entArch.at(ent)->get(ent, type);
     }
 
@@ -1283,7 +1283,7 @@ public:
 
 private:
     template <typename T>
-    [[nodiscard]] T& internalGet(const Ent ent) noexcept(false) {
+    [[nodiscard]] std::optional<std::reference_wrapper<T>> internalGet(const Ent ent) noexcept {
         if (auto addEntsIt = lateUpgrade.addEnts.find(ent); addEntsIt != lateUpgrade.addEnts.end()) {
             if (auto addEntsTypeIt = addEntsIt->second.find(typeid(T).hash_code()); addEntsTypeIt != addEntsIt->second.end()) {
                 return std::any_cast<T&>(addEntsTypeIt->second);
@@ -1298,11 +1298,11 @@ private:
             auto& any = reg.get(ent, typeid(T).hash_code());
             return std::any_cast<T&>(any);
         }
-        throw std::exception();
+        return std::nullopt;
     }
 
     template <typename T>
-    [[nodiscard]] const T& internalGet(const Ent ent) const noexcept(false) {
+    [[nodiscard]] std::optional<const std::reference_wrapper<T>> internalGet(const Ent ent) const noexcept {
         if (auto addEntsIt = lateUpgrade.addEnts.find(ent); addEntsIt != lateUpgrade.addEnts.end()) {
             if (auto addEntsTypeIt = addEntsIt->second.find(typeid(T).hash_code()); addEntsTypeIt != addEntsIt->second.end()) {
                 return std::any_cast<const T&>(addEntsTypeIt->second);
@@ -1317,17 +1317,24 @@ private:
             auto& any = reg.get(ent, typeid(T).hash_code());
             return std::any_cast<const T&>(any);
         }
-        throw std::exception();
+        return std::nullopt;
     }
 
 public:
-    template <typename... Ts> requires (sizeof...(Ts) >= 1)
-    [[nodiscard]] std::optional<std::tuple<Ts&...>> get(const Ent ent) noexcept {
-        try {
-            return std::forward_as_tuple(internalGet<Ts>(ent)...);
-        } catch(std::exception) {
-            return std::nullopt;
+    template <typename T, typename... Ts>
+    [[nodiscard]] std::optional<std::tuple<T&, Ts&...>> get(const Ent ent) noexcept {
+        if (auto opt = internalGet<T>(ent)) {
+            if constexpr (sizeof...(Ts) > 0) {
+                if (auto othOpt = get<Ts...>(ent)) {
+                    return std::tuple_cat(std::forward_as_tuple(opt.value()), othOpt.value());
+                } else {
+                    return std::nullopt;
+                }
+            } else {
+                return std::forward_as_tuple(opt.value());
+            }
         }
+        return std::nullopt;
     }
 
     [[nodiscard]] bool hasParent(const Ent childEnt) const noexcept {
@@ -1444,7 +1451,7 @@ public:
     }
 
     template <typename Comp, typename... Comps> requires (std::copy_constructible<Comp>)
-    std::tuple<Comp&, Comps&...> add(const Ent ent, const Comp& comp, const Comps&... comps) noexcept(false) {
+    std::optional<std::tuple<Comp&, Comps&...>> add(const Ent ent, const Comp& comp, const Comps&... comps) noexcept {
         if (reg.exist(ent)) {
             lateUpgrade.add(
                 ent,
@@ -1456,19 +1463,18 @@ public:
         } else {
             printf("World::add(): Impossible d'ajouter sur une entitée qui n'existe pas [type: %s]\n", typeid(Comp).name());
             (printf("World::add(): Impossible d'ajouter sur une entitée qui n'existe pas [type: %s]\n", typeid(Comps).name()), ...);
-            throw "World Add() Error";
+            return std::nullopt;
         }
 
-        return std::forward_as_tuple(internalGet<Comp>(ent), internalGet<Comps>(ent)...);
+        return std::forward_as_tuple(internalGet<Comp>(ent).value(), internalGet<Comps>(ent).value()...);
     }
 
     template <typename T, typename... Ts>
-    void del(const Ent ent) noexcept(false) {
+    void del(const Ent ent) noexcept {
         if (reg.has(ent, {typeid(T).hash_code()})) {
             lateUpgrade.del(ent, typeid(T).hash_code());
         } else {
             printf("World::del(): Impossible de supprimer un composant qui n'existe pas - %s\n", typeid(T).name());
-            throw "World Del() Error";
         }
 
         if constexpr (sizeof...(Ts) > 0) {
