@@ -1160,18 +1160,13 @@ private:
     }
 
     template <typename... Funcs>
-    constexpr void addMainSys(Funcs&&... funcs) noexcept {
-        mainSystems.emplace_back(nullptr, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
-    }
-
-    template <typename... Funcs>
     constexpr void addMainCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         mainSystems.emplace_back(cond, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
     }
 
     template <typename... Funcs>
-    constexpr void addThreadedSys(Funcs&&... funcs) noexcept {
-        threadedSystems.emplace_back(nullptr, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
+    constexpr void addMainFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
+        mainFixedSystems.emplace_back(cond, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
     }
 
     template <typename... Funcs>
@@ -1180,13 +1175,18 @@ private:
     }
 
     template <typename... Funcs>
-    constexpr void addLateSys(Funcs&&... funcs) noexcept {
-        lateSystems.emplace_back(nullptr, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
+    constexpr void addThreadedFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
+        threadedFixedSystems.emplace_back(cond, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
     }
 
     template <typename... Funcs>
     constexpr void addLateCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         lateSystems.emplace_back(cond, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
+    }
+
+    template <typename... Funcs>
+    constexpr void addLateFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
+        lateFixedSystems.emplace_back(cond, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
     }
 
     void start(World& world) const noexcept {
@@ -1229,13 +1229,147 @@ private:
         }
     }
 
+    void runFixed(World& world) noexcept {
+        for (const auto& mainFunc: mainFixedSystems) {
+            if (mainFunc.first == nullptr || mainFunc.first(world)) {
+                for (const auto& mainRow: mainFunc.second) {
+                    mainRow(world);
+                }
+            }
+        }
+
+        for (const auto& funcs: threadedFixedSystems) {
+            if (funcs.first == nullptr || funcs.first(world)) {
+                if (!isUseMultithreading) {
+                    for (auto& func: funcs.second) {
+                        func(world);
+                    }
+                } else {
+                    threadpool.addTasks(funcs.second);
+                }
+            }
+        }
+
+        threadpool.run();
+
+        threadpool.wait();
+
+        for (const auto& lateFunc: lateFixedSystems) {
+            if (lateFunc.first == nullptr || lateFunc.first(world)) {
+                for (const auto& lateRow: lateFunc.second) {
+                    lateRow(world);
+                }
+            }
+        }
+    }
+
 private:
     std::vector<void(*)(World&)> startSystems;
     std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> mainSystems;
+    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> mainFixedSystems;
     std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> threadedSystems;
+    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> threadedFixedSystems;
     std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> lateSystems;
+    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> lateFixedSystems;
     ThreadPool threadpool;
     bool isUseMultithreading;
+};
+
+///////////////////////////////////////////////////////////////////////////////////
+
+class Time final {
+friend class ZerEngine;
+public:
+    Time(float newFixedTimeStep = 0.02f) noexcept:
+        t2(std::chrono::high_resolution_clock::now()),
+        fixedTimeStep(newFixedTimeStep) {
+    }
+
+private:    
+    constexpr void setFixedTimeStep(float newFixedTimeStep) noexcept {
+        fixedTimeStep = newFixedTimeStep;
+    }
+
+    void update() noexcept {
+        auto t1 = std::chrono::high_resolution_clock::now();
+        dt = std::chrono::duration_cast<std::chrono::duration<float>>(t1 - t2).count();
+        t2 = t1;
+        timeScale = newTimeScale;
+        #ifdef DISPLAY_FPS
+            frameCounter();
+        #endif
+        timeStepBuffer += dt;
+        isTimeStepFrame = false;
+        if (timeStepBuffer >= fixedTimeStep) {
+            isTimeStepFrame = true;
+            nbFixedSteps = std::floor(timeStepBuffer / fixedTimeStep);
+            timeStepBuffer -= fixedTimeStep * nbFixedSteps;
+        }
+    }
+
+public:
+    [[nodiscard]] constexpr float delta() const noexcept {
+        return dt * timeScale;
+    }
+
+    [[nodiscard]] constexpr float unscaledDelta() const noexcept {
+        return dt;
+    }
+
+    [[nodiscard]] constexpr float unscaledFixedDelta() const noexcept {
+        return fixedTimeStep;
+    }
+
+    [[nodiscard]] constexpr float fixedDelta() const noexcept {
+        return fixedTimeStep * timeScale;
+    }
+
+    [[nodiscard]] constexpr bool isTimeStep() const noexcept {
+        return isTimeStepFrame;
+    }
+
+    [[nodiscard]] constexpr unsigned int getNbFixedSteps() const noexcept {
+        return nbFixedSteps;
+    }
+
+    constexpr float getTimeScale() const noexcept {
+        return newTimeScale;
+    }
+
+    constexpr void setTimeScale(const float newScale) noexcept {
+        newTimeScale = newScale;
+    }
+
+private:
+    #ifdef DISPLAY_FPS
+        void frameCounter() noexcept {
+            nbFrames++;
+            timer += dt;
+            if (timer >= FRAME_COOLDOWN) {
+                printf("FPS: %zu\n", nbFrames);
+                timer -= FRAME_COOLDOWN;
+                nbFrames = 0;
+            }
+        }
+    #endif
+
+private:
+    float newTimeScale = 1.0;
+    float timeScale = 1.0;
+
+private:
+    double dt = 0;
+    std::chrono::high_resolution_clock::time_point t2;
+    bool isTimeStepFrame = false;
+    float fixedTimeStep;
+    float timeStepBuffer = 0;
+    unsigned int nbFixedSteps = 0;
+
+    #ifdef DISPLAY_FPS
+        float timer = 0;
+        size_t nbFrames = 0;
+        constexpr static float FRAME_COOLDOWN = 1.0;
+    #endif
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -1534,8 +1668,18 @@ private:
 
 class ZerEngine final {
 public:
+    ZerEngine() {
+        world.res.emplace(typeid(Time).hash_code(), std::make_any<Time>(0.02f));
+    }
+
     [[nodiscard]] constexpr ZerEngine& useMultithreading(bool newVal) noexcept {
         world.sys.useMultithreading(newVal);
+        return *this;
+    }
+
+    [[nodiscard]] constexpr ZerEngine& setFixedTimeStep(float newFixedTimeStep) noexcept {
+        auto [time] = world.getRes<Time>();
+        time.setFixedTimeStep(newFixedTimeStep);
         return *this;
     }
 
@@ -1558,7 +1702,7 @@ public:
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addMainSys(Funcs&&... funcs) noexcept {
-        world.sys.addMainSys(std::forward<Funcs>(funcs)...);
+        world.sys.addMainCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
@@ -1569,8 +1713,20 @@ public:
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    [[nodiscard]] ZerEngine& addMainFixedSys(Funcs&&... funcs) noexcept {
+        world.sys.addMainFixedCondSys(nullptr, std::forward<Funcs>(funcs)...);
+        return *this;
+    }
+
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    [[nodiscard]] ZerEngine& addMainFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
+        world.sys.addMainFixedCondSys(cond, std::forward<Funcs>(funcs)...);
+        return *this;
+    }
+
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addThreadedSys(Funcs&&... funcs) noexcept {
-        world.sys.addThreadedSys(std::forward<Funcs>(funcs)...);
+        world.sys.addThreadedCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
@@ -1581,8 +1737,20 @@ public:
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    [[nodiscard]] ZerEngine& addThreadedFixedSys(Funcs&&... funcs) noexcept {
+        world.sys.addThreadedFixedCondSys(nullptr, std::forward<Funcs>(funcs)...);
+        return *this;
+    }
+
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    [[nodiscard]] ZerEngine& addThreadedFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
+        world.sys.addThreadedFixedCondSys(cond, std::forward<Funcs>(funcs)...);
+        return *this;
+    }
+
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addLateSys(Funcs&&... funcs) noexcept {
-        world.sys.addLateSys(std::forward<Funcs>(funcs)...);
+        world.sys.addLateCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
@@ -1592,12 +1760,35 @@ public:
         return *this;
     }
 
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    [[nodiscard]] ZerEngine& addLateFixedSys(Funcs&&... funcs) noexcept {
+        world.sys.addLateFixedCondSys(nullptr, std::forward<Funcs>(funcs)...);
+        return *this;
+    }
+
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    [[nodiscard]] ZerEngine& addLateFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
+        world.sys.addLateFixedCondSys(cond, std::forward<Funcs>(funcs)...);
+        return *this;
+    }
+
     void run() noexcept {
         world.isRunning = true;
         world.sys.start(world);
         while (world.isRunning) {
             world.upgrade();
+
+            auto [time] = world.getRes<Time>();
+            time.update();
+
             world.sys.run(world);
+
+            if (time.isTimeStep()) {
+                for (unsigned int i = 0; i < time.getNbFixedSteps(); i++) {
+                    world.upgrade();
+                    world.sys.runFixed(world);
+                }
+            }
         }
         world.upgrade();
     }

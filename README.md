@@ -12,13 +12,20 @@ A simple ECS logic core.
 
 # Code Example
 ```c++
-import ZerengineCore;
+#include <Zerengine.hpp>
 
-// New FakeTime resource.
-struct FakeTime {
-    float fakeDelta() const {
-        return 1;
+// Ressouces declaration.
+struct AppState {
+    enum AppStateType: size_t {
+        HOME_SCREEN,
+        IN_GAME
+    };
+
+    AppState(AppStateType newCurAppState):
+        curAppState(newCurAppState) {
     }
+
+    AppStateType curAppState;
 };
 
 // Components declaration.
@@ -64,11 +71,11 @@ void initPos(World& world) {
 // Systems executed on each frame.
 void movePosSys(World& world) {
     auto positions = world.view<Position, const Velocity>();
-    auto [time] = world.getRes<const FakeTime>();
+    auto [time] = world.getRes<const Time>();
 
     for (auto [_, position, velocity]: positions) {
-        position.x += velocity.x * time.fakeDelta();
-        position.y += velocity.y * time.fakeDelta();
+        position.x += velocity.x * time.fixedDelta();
+        position.y += velocity.y * time.fixedDelta();
     }
 }
 
@@ -84,10 +91,10 @@ void playerActionSys(World& world) {
 
 void playerDashSys(World& world) {
     auto players = world.view<PlayerDash, Velocity>();
-    auto [time] = world.getRes<const FakeTime>();
+    auto [time] = world.getRes<const Time>();
 
     for (auto [playerEnt, playerDash, velocity]: players) {
-        if (playerDash.canStopDash(time.fakeDelta())) {
+        if (playerDash.canStopDash(time.deltaTime())) {
             world.del<PlayerDash>(playerEnt);
             velocity.x = 0;
         } else {
@@ -103,11 +110,20 @@ void stopRunSys(World& world) {
 int main() {
     // Our application.
     ZerEngine()
-        .useMultithreading(false) // <== optional
-        .addRes<FakeTime>()
+        .useMultithreading(true) // <== optional
+        .setFixedTimeStep(0.02f) // <== Set fixed time step for fixed systems
+        .addRes<AppState>(AppState::IN_GAME)
         .addStartSys(initPos)
-        .addSys(playerActionSys, playerDashSys) // Systems work at the same time
-        .addSys(movePosSys, stopRunSys)
+        .addMainSys(stopRunSys)
+        .addThreadedSys(playerActionSys, playerDashSys) // Systems work at the same time
+        .addThreadedFixedSys(movePosSys) // <== Systems work at fixed time
+        .addThreadedCondSys(
+            [](World& world) -> bool {
+                auto [appState] = world.getRes<const AppState>();
+                return appState == AppState::IN_GAME;
+            },
+            /** This Systems only runs if condition is true **/
+        )
         .addLateSys(/*...*/)
         .run();
 
@@ -115,14 +131,8 @@ int main() {
 }
 ```
 
-# Integration (One File)
+# Integration
 Pass -I argument to the compiler to add the src directory to the include paths.
 ```c++
-#include <ZerEngineOneFile/ZerEngine.hpp>
-```
-
-# Integration (Modules)
-Precompile the modules in the ZerEngineModules folder and import them with:
-```c++
-import ZerengineCore;
+#include <ZerEngine.hpp>
 ```
