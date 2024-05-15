@@ -191,7 +191,7 @@ private:
     }
 
     [[nodiscard]] constexpr auto&& get(this auto&& self, const Ent ent) noexcept {
-        return self.comps.at(ent);
+        return std::move(self).comps.at(ent);
     }
 
     constexpr void copy(const Ent ent, const CompPool& oth) noexcept {
@@ -1627,12 +1627,22 @@ public:
     void setActive(const Ent ent) noexcept {
         if (has<IsInactive>(ent)) {
             del<IsInactive>(ent);
+            if (auto childrenOpt = getChildren(ent)) {
+                for (auto childEnt: childrenOpt.value().get()) {
+                    setActive(childEnt);
+                }
+            }
         }
     }
 
     void setInactive(const Ent ent) noexcept {
         if (!has<IsInactive>(ent)) {
             add(ent, IsInactive());
+            if (auto childrenOpt = getChildren(ent)) {
+                for (auto childEnt: childrenOpt.value().get()) {
+                    setInactive(childEnt);
+                }
+            }
         }
     }
 
