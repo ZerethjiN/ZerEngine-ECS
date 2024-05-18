@@ -71,7 +71,7 @@ void initPos(World& world) {
 // Systems executed on each frame.
 void movePosSys(World& world) {
     auto positions = world.view<Position, const Velocity>();
-    auto [time] = world.getRes<const Time>();
+    auto [time] = world.resource<const Time>();
 
     for (auto [_, position, velocity]: positions) {
         position.x += velocity.x * time.fixedDelta();
@@ -91,7 +91,7 @@ void playerActionSys(World& world) {
 
 void playerDashSys(World& world) {
     auto players = world.view<PlayerDash, Velocity>();
-    auto [time] = world.getRes<const Time>();
+    auto [time] = world.resource<const Time>();
 
     for (auto [playerEnt, playerDash, velocity]: players) {
         if (playerDash.canStopDash(time.deltaTime())) {

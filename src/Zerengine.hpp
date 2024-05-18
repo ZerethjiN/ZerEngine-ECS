@@ -1492,7 +1492,7 @@ public:
     }
 
     template <typename... Ts> requires (sizeof...(Ts) > 0)
-    [[nodiscard]] decltype(auto) getRes(this auto&& self) noexcept {
+    [[nodiscard]] decltype(auto) resource(this auto&& self) noexcept {
         return std::forward_as_tuple(std::any_cast<Ts&>(std::move(self).res.get(typeid(Ts).hash_code()))...);
     }
 
@@ -1688,7 +1688,7 @@ public:
     }
 
     [[nodiscard]] constexpr ZerEngine& setFixedTimeStep(float newFixedTimeStep) noexcept {
-        auto [time] = world.getRes<Time>();
+        auto [time] = world.resource<Time>();
         time.setFixedTimeStep(newFixedTimeStep);
         return *this;
     }
@@ -1788,7 +1788,7 @@ public:
         while (world.isRunning) {
             world.upgrade();
 
-            auto [time] = world.getRes<Time>();
+            auto [time] = world.resource<Time>();
             time.update();
 
             world.sys.run(world);
