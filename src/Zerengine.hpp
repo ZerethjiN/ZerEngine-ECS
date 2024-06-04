@@ -32,6 +32,7 @@ struct WithInactive final {};
 constinit WithInactive withInactive;
 
 class IsInactive final {};
+class DontDestroyOnLoad final {};
 
 ///////////////////////////////////////////////////////////////////////////////////
 
@@ -178,6 +179,7 @@ class IsInactive final {};
 class CompPool final {
 friend class Archetype;
 friend class LiteArchetype;
+friend class LateUpgrade;
 private:
     CompPool() noexcept = default;
 
@@ -217,6 +219,7 @@ constinit ArchetypeCreateWithout archetypeCreateWithout;
 class Archetype final {
 friend class Registry;
 friend class LiteArchetype;
+friend class LateUpgrade;
 template<typename... Ts>
 friend class View;
 private:
@@ -232,7 +235,7 @@ private:
 
     Archetype(ArchetypeCreateWith, Archetype& oldArch, const Ent ent, const std::any& a) noexcept:
         ents({ent}),
-        pools(oldArch.size() + 1) {
+        pools(oldArch.pools.size() + 1) {
         for (const auto& pair: oldArch.pools) {
             pools.emplace(
                 std::piecewise_construct,
@@ -246,7 +249,7 @@ private:
 
     Archetype(ArchetypeCreateWithout, Archetype& oldArch, const Ent ent, const Type type) noexcept:
         ents({ent}),
-        pools(oldArch.size() - 1) {
+        pools(oldArch.pools.size() - 1) {
         for (const auto& pair: oldArch.pools) {
             if (pair.first != type) {
                 pools.emplace(
@@ -660,6 +663,30 @@ private:
     }
 
 private:
+    void appendChildren(const Ent parentEnt, const std::unordered_set<Ent>& childrenEnt) noexcept {
+        auto parentIt = parentChildrens.find(parentEnt);
+        if (parentIt == parentChildrens.end()) {
+            parentIt = parentChildrens.emplace(
+                std::piecewise_construct,
+                std::forward_as_tuple(parentEnt),
+                std::forward_as_tuple()
+            ).first;
+        }
+        for (const auto childEnt: childrenEnt) {
+            if (childrenParent.contains(childEnt)) {
+                printf("Children: Tu ne peux pas avoir deux parents Billy[%zu]\n", childEnt);
+            } else if (parentEnt == childEnt) {
+                printf("Children: Impossible d'etre son propre pere\n");  
+            } else {
+                childrenParent.emplace(childEnt, parentEnt);
+                parentIt->second.emplace(childEnt);
+            }
+        }
+        if (parentIt->second.empty()) {
+            parentChildrens.erase(parentIt);
+        }
+    }
+
     void appendChildren(const Ent parentEnt, const std::vector<Ent>& childrenEnt) noexcept {
         auto parentIt = parentChildrens.find(parentEnt);
         if (parentIt == parentChildrens.end()) {
@@ -788,16 +815,16 @@ private:
         }
     }
 
-    void filterArchsByType(const Type type, std::unordered_set<Archetype*>& archs) noexcept {
+    void filterArchsByType(const Type type, std::unordered_set<Archetype*>& compatibleArchs) noexcept {
         std::unordered_set<Archetype*> newArchs;
         if (auto archsByTypeIt = archsByType.find(type); archsByTypeIt != archsByType.end()) {
             for (auto* arch: archsByTypeIt->second) {
-                if (archs.contains(arch)) {
+                if (compatibleArchs.contains(arch)) {
                     newArchs.emplace(arch);
                 }
             }
         }
-        archs = newArchs;
+        compatibleArchs = newArchs;
     }
 
 private:
@@ -964,16 +991,6 @@ private:
 
 private:
     void upgrade(World& world, Registry& reg) noexcept {
-        if (needClean) {
-            needClean = false;
-            delEnts.clear();
-            addEnts.clear();
-            delComps.clear();
-            addComps.clear();
-            reg.clean();
-            newSceneFunc(world);
-        }
-
         for (const auto& pair: addComps) {
             for (const auto& pairType: pair.second) {
                 reg.add(pair.first, pairType.second);
@@ -998,6 +1015,39 @@ private:
         addEnts.clear();
         delComps.clear();
         addComps.clear();
+
+        if (needClean) {
+            needClean = false;
+            for (auto [dontDestroyEnt]: reg.view({typeid(DontDestroyOnLoad).hash_code()}, {})) {
+                auto* arch = reg.entArch.at(dontDestroyEnt);
+                std::unordered_map<Type, std::any> comps;
+                for (auto& pair: arch->pools) {
+                    comps.emplace(pair.first, pair.second->comps.at(dontDestroyEnt));
+                }
+                dontDestroyes.emplace(dontDestroyEnt, comps);
+                if (auto childrenIt = reg.parentChildrens.find(dontDestroyEnt); childrenIt != reg.parentChildrens.end()) {
+                    dontDestroyesHierarchies.emplace(dontDestroyEnt, childrenIt->second);
+                }
+            }
+            reg.clean();
+            std::unordered_map<Ent, Ent> oldToNewEnts;
+            for (const auto& pair: dontDestroyes) {
+                auto newEntId = reg.getEntToken();
+                reg.newEnt(newEntId, pair.second);
+                oldToNewEnts.emplace(pair.first, newEntId);
+            }
+            dontDestroyes.clear();
+            for (const auto& pair: dontDestroyesHierarchies) {
+                auto newEntId = oldToNewEnts.at(pair.first);
+                std::unordered_set<Ent> newChildrens;
+                for (auto oldChildEnt: pair.second) {
+                    newChildrens.emplace(oldToNewEnts.at(oldChildEnt));
+                }
+                reg.appendChildren(newEntId, newChildrens);
+            }
+            dontDestroyesHierarchies.clear();
+            newSceneFunc(world);
+        }
     }
 
 private:
@@ -1006,6 +1056,8 @@ private:
     std::unordered_map<Ent, std::unordered_map<Type, std::any>> addComps;
     std::unordered_set<Ent> delEnts;
     std::unordered_map<Ent, std::unordered_set<Type>> delComps;
+    std::unordered_map<Ent, std::unordered_map<Type, std::any>> dontDestroyes;
+    std::unordered_map<Ent, std::unordered_set<Ent>> dontDestroyesHierarchies;
     bool needClean = false;
     void(*newSceneFunc)(World&);
 };
@@ -1219,7 +1271,9 @@ private:
         threadpool.run();
 
         threadpool.wait();
+    }
 
+    void runLate(World& world) noexcept {
         for (const auto& lateFunc: lateSystems) {
             if (lateFunc.first == nullptr || lateFunc.first(world)) {
                 for (const auto& lateRow: lateFunc.second) {
@@ -1488,6 +1542,16 @@ public:
     }
 
     void appendChildren(const Ent parentEnt, const std::vector<Ent>& childrenEnt) noexcept {
+        if (has<DontDestroyOnLoad>(parentEnt)) {
+            for (auto childEnt: childrenEnt) {
+                addDontDestroyOnLoad(childEnt);
+            }
+        }
+        if (has<IsInactive>(parentEnt)) {
+            for (auto childEnt: childrenEnt) {
+                setInactive(childEnt);
+            }
+        }
         reg.appendChildren(parentEnt, childrenEnt);
     }
 
@@ -1646,6 +1710,21 @@ public:
         }
     }
 
+    [[nodiscard]] constexpr std::size_t getTotalEntities() const noexcept {
+        return reg.entArch.size();
+    }
+
+    void addDontDestroyOnLoad(const Ent ent) noexcept {
+        if (!has<DontDestroyOnLoad>(ent)) {
+            add(ent, DontDestroyOnLoad());
+            if (auto childrenOpt = getChildren(ent)) {
+                for (auto childEnt: childrenOpt.value().get()) {
+                    addDontDestroyOnLoad(childEnt);
+                }
+            }
+        }
+    }
+
     void loadScene(void(*newScene)(World&)) noexcept {
         lateUpgrade.loadScene(newScene);
     }
@@ -1799,6 +1878,8 @@ public:
                     world.sys.runFixed(world);
                 }
             }
+
+            world.sys.runLate(world);
         }
         world.upgrade();
     }
