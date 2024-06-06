@@ -53,7 +53,7 @@ struct PlayerDash {
 };
 
 // Initialization system executed only once at startup.
-void initPos(World& world) {
+void initPos(StartSystem, World& world) {
     world.newEnt(
         Player{},
         Position{0.0f, 0.0f},
@@ -69,7 +69,7 @@ void initPos(World& world) {
 }
 
 // Systems executed on each frame.
-void movePosSys(World& world) {
+void movePosSys(ThreadedFixedSystem, World& world) {
     auto positions = world.view<Position, const Velocity>();
     auto [time] = world.resource<const Time>();
 
@@ -79,7 +79,7 @@ void movePosSys(World& world) {
     }
 }
 
-void playerActionSys(World& world) {
+void playerActionSys(ThreadedSystem, World& world) {
     auto players = world.view(with<Player>, without<PlayerDash>);
 
     for (auto [playerEnt]: players) {
@@ -89,7 +89,7 @@ void playerActionSys(World& world) {
     }
 }
 
-void playerDashSys(World& world) {
+void playerDashSys(ThreadedSystem, World& world) {
     auto players = world.view<PlayerDash, Velocity>();
     auto [time] = world.resource<const Time>();
 
@@ -103,7 +103,7 @@ void playerDashSys(World& world) {
     }
 }
 
-void stopRunSys(World& world) {
+void stopRunSys(MainSystem, World& world) {
     world.stopRun();
 }
 

@@ -34,6 +34,14 @@ constinit WithInactive withInactive;
 class IsInactive final {};
 class DontDestroyOnLoad final {};
 
+class StartSystem final {};
+class MainSystem final {};
+class MainFixedSystem final {};
+class ThreadedSystem final {};
+class ThreadedFixedSystem final {};
+class LateSystem final {};
+class LateFixedSystem final {};
+
 ///////////////////////////////////////////////////////////////////////////////////
 
 // class Comp {
@@ -1110,13 +1118,26 @@ private:
         }
     }
 
-    void addTasks(const std::vector<void(*)(World&)>& newTasks) noexcept {
+    void addTasks(const std::vector<void(*)(ThreadedSystem, World&)>& newTasks) noexcept {
         tasks.emplace_back(newTasks);
+    }
+
+    void addFixedTasks(const std::vector<void(*)(ThreadedFixedSystem, World&)>& newTasks) noexcept {
+        fixedTasks.emplace_back(newTasks);
     }
 
     void run() noexcept {
         if (!tasks.empty()) {
             nbTasksDone = tasks[0].size();
+            cvTask.notify_all();
+        } else {
+            nbTasksDone = 0;
+        }
+    }
+
+    void fixedRun() noexcept {
+        if (!fixedTasks.empty()) {
+            nbTasksDone = fixedTasks[0].size();
             cvTask.notify_all();
         } else {
             nbTasksDone = 0;
@@ -1133,39 +1154,74 @@ private:
         });
     }
 
+    void fixedWait() noexcept {
+        std::unique_lock<std::mutex> lock(mtx);
+        cvFinished.wait(lock, [&]() {
+            if (!tasks.empty() && nbTasksDone != 0) {
+               cvTask.notify_all(); 
+            }
+            return (fixedTasks.empty() && (nbTasks == 0));
+        });
+    }
+
 private:
     void task() noexcept {
         srand(time(NULL));
         std::unique_lock<std::mutex> lock(mtx);
         while (true) {
             cvTask.wait(lock, [&]() {
-                return (nbTasks < nbThreads) && ((!tasks.empty() && nbTasksDone != 0) || isStop);
+                return (nbTasks < nbThreads) && (((!tasks.empty() || !fixedTasks.empty()) && nbTasksDone != 0) || isStop);
             });
-            if (isStop && tasks.empty()) {
+            if (isStop && tasks.empty() && fixedTasks.empty()) {
                 return;
             }
 
-            nbTasks++;
-            auto newTask = tasks[0].back();
-            tasks[0].pop_back();
-            nbTasksDone--;
-            lock.unlock();
+            if (!tasks.empty()) {
+                nbTasks++;
+                auto newTask = tasks[0].back();
+                tasks[0].pop_back();
+                nbTasksDone--;
+                lock.unlock();
 
-            newTask(world);
+                newTask({}, world);
 
-            lock.lock();
-            nbTasks--;
+                lock.lock();
+                nbTasks--;
 
-            if (nbTasksDone == 0 && nbTasks == 0) {
-                tasks.erase(tasks.begin());
-                if (!tasks.empty()) {
-                    nbTasksDone = tasks[0].size();
+                if (nbTasksDone == 0 && nbTasks == 0) {
+                    tasks.erase(tasks.begin());
+                    if (!tasks.empty()) {
+                        nbTasksDone = tasks[0].size();
+                        cvFinished.notify_one();
+                    }
+                }
+
+                if (tasks.empty() && nbTasks == 0) {
                     cvFinished.notify_one();
                 }
-            }
+            } else {
+                nbTasks++;
+                auto newTask = fixedTasks[0].back();
+                fixedTasks[0].pop_back();
+                nbTasksDone--;
+                lock.unlock();
 
-            if (tasks.empty() && nbTasks == 0) {
-                cvFinished.notify_one();
+                newTask({}, world);
+
+                lock.lock();
+                nbTasks--;
+
+                if (nbTasksDone == 0 && nbTasks == 0) {
+                    fixedTasks.erase(fixedTasks.begin());
+                    if (!fixedTasks.empty()) {
+                        nbTasksDone = fixedTasks[0].size();
+                        cvFinished.notify_one();
+                    }
+                }
+
+                if (fixedTasks.empty() && nbTasks == 0) {
+                    cvFinished.notify_one();
+                }
             }
         }
     }
@@ -1178,7 +1234,8 @@ private:
 
 private:
     World& world;
-    std::vector<std::vector<void(*)(World&)>> tasks;
+    std::vector<std::vector<void(*)(ThreadedSystem, World&)>> tasks;
+    std::vector<std::vector<void(*)(ThreadedFixedSystem, World&)>> fixedTasks;
     std::mutex mtx;
     std::size_t nbTasksDone;
     std::condition_variable cvTask;
@@ -1207,43 +1264,43 @@ private:
         isUseMultithreading = newVal;
     }
 
-    constexpr void addStartSys(void(*const func)(World&)) noexcept {
+    constexpr void addStartSys(void(*const func)(StartSystem, World&)) noexcept {
         startSystems.emplace_back(func);
     }
 
     template <typename... Funcs>
     constexpr void addMainCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        mainSystems.emplace_back(cond, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
+        mainSystems.emplace_back(cond, std::initializer_list<void(*)(MainSystem, World&)>{std::forward<Funcs>(funcs)...});
     }
 
     template <typename... Funcs>
     constexpr void addMainFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        mainFixedSystems.emplace_back(cond, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
+        mainFixedSystems.emplace_back(cond, std::initializer_list<void(*)(MainFixedSystem, World&)>{std::forward<Funcs>(funcs)...});
     }
 
     template <typename... Funcs>
     constexpr void addThreadedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        threadedSystems.emplace_back(cond, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
+        threadedSystems.emplace_back(cond, std::initializer_list<void(*)(ThreadedSystem, World&)>{std::forward<Funcs>(funcs)...});
     }
 
     template <typename... Funcs>
     constexpr void addThreadedFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        threadedFixedSystems.emplace_back(cond, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
+        threadedFixedSystems.emplace_back(cond, std::initializer_list<void(*)(ThreadedFixedSystem, World&)>{std::forward<Funcs>(funcs)...});
     }
 
     template <typename... Funcs>
     constexpr void addLateCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        lateSystems.emplace_back(cond, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
+        lateSystems.emplace_back(cond, std::initializer_list<void(*)(LateSystem, World&)>{std::forward<Funcs>(funcs)...});
     }
 
     template <typename... Funcs>
     constexpr void addLateFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        lateFixedSystems.emplace_back(cond, std::initializer_list<void(*)(World&)>{std::forward<Funcs>(funcs)...});
+        lateFixedSystems.emplace_back(cond, std::initializer_list<void(*)(LateFixedSystem, World&)>{std::forward<Funcs>(funcs)...});
     }
 
     void start(World& world) const noexcept {
         for (const auto& func: startSystems) {
-            func(world);
+            func({}, world);
         }
     }
 
@@ -1251,7 +1308,7 @@ private:
         for (const auto& mainFunc: mainSystems) {
             if (mainFunc.first == nullptr || mainFunc.first(world)) {
                 for (const auto& mainRow: mainFunc.second) {
-                    mainRow(world);
+                    mainRow({}, world);
                 }
             }
         }
@@ -1260,7 +1317,7 @@ private:
             if (funcs.first == nullptr || funcs.first(world)) {
                 if (!isUseMultithreading) {
                     for (auto& func: funcs.second) {
-                        func(world);
+                        func({}, world);
                     }
                 } else {
                     threadpool.addTasks(funcs.second);
@@ -1277,7 +1334,7 @@ private:
         for (const auto& lateFunc: lateSystems) {
             if (lateFunc.first == nullptr || lateFunc.first(world)) {
                 for (const auto& lateRow: lateFunc.second) {
-                    lateRow(world);
+                    lateRow({}, world);
                 }
             }
         }
@@ -1287,7 +1344,7 @@ private:
         for (const auto& mainFunc: mainFixedSystems) {
             if (mainFunc.first == nullptr || mainFunc.first(world)) {
                 for (const auto& mainRow: mainFunc.second) {
-                    mainRow(world);
+                    mainRow({}, world);
                 }
             }
         }
@@ -1296,35 +1353,35 @@ private:
             if (funcs.first == nullptr || funcs.first(world)) {
                 if (!isUseMultithreading) {
                     for (auto& func: funcs.second) {
-                        func(world);
+                        func({}, world);
                     }
                 } else {
-                    threadpool.addTasks(funcs.second);
+                    threadpool.addFixedTasks(funcs.second);
                 }
             }
         }
 
-        threadpool.run();
+        threadpool.fixedRun();
 
-        threadpool.wait();
+        threadpool.fixedWait();
 
         for (const auto& lateFunc: lateFixedSystems) {
             if (lateFunc.first == nullptr || lateFunc.first(world)) {
                 for (const auto& lateRow: lateFunc.second) {
-                    lateRow(world);
+                    lateRow({}, world);
                 }
             }
         }
     }
 
 private:
-    std::vector<void(*)(World&)> startSystems;
-    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> mainSystems;
-    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> mainFixedSystems;
-    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> threadedSystems;
-    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> threadedFixedSystems;
-    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> lateSystems;
-    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(World&)>>> lateFixedSystems;
+    std::vector<void(*)(StartSystem, World&)> startSystems;
+    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(MainSystem, World&)>>> mainSystems;
+    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(MainFixedSystem, World&)>>> mainFixedSystems;
+    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(ThreadedSystem, World&)>>> threadedSystems;
+    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(ThreadedFixedSystem, World&)>>> threadedFixedSystems;
+    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(LateSystem, World&)>>> lateSystems;
+    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(LateFixedSystem, World&)>>> lateFixedSystems;
     ThreadPool threadpool;
     bool isUseMultithreading;
 };
@@ -1784,78 +1841,78 @@ public:
         return *this;
     }
 
-    [[nodiscard]] ZerEngine& addStartSys(void(*const func)(World&)) noexcept {
+    [[nodiscard]] ZerEngine& addStartSys(void(*const func)(StartSystem, World&)) noexcept {
         world.sys.addStartSys(func);
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(MainSystem, World&)> || std::same_as<Funcs, void(&)(MainSystem, World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addMainSys(Funcs&&... funcs) noexcept {
         world.sys.addMainCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(MainSystem, World&)> || std::same_as<Funcs, void(&)(MainSystem, World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addMainCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         world.sys.addMainCondSys(cond, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(MainFixedSystem, World&)> || std::same_as<Funcs, void(&)(MainFixedSystem, World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addMainFixedSys(Funcs&&... funcs) noexcept {
         world.sys.addMainFixedCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(MainFixedSystem, World&)> || std::same_as<Funcs, void(&)(MainFixedSystem, World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addMainFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         world.sys.addMainFixedCondSys(cond, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(ThreadedSystem, World&)> || std::same_as<Funcs, void(&)(ThreadedSystem, World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addThreadedSys(Funcs&&... funcs) noexcept {
         world.sys.addThreadedCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(ThreadedSystem, World&)> || std::same_as<Funcs, void(&)(ThreadedSystem, World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addThreadedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         world.sys.addThreadedCondSys(cond, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(ThreadedFixedSystem, World&)> || std::same_as<Funcs, void(&)(ThreadedFixedSystem, World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addThreadedFixedSys(Funcs&&... funcs) noexcept {
         world.sys.addThreadedFixedCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(ThreadedFixedSystem, World&)> || std::same_as<Funcs, void(&)(ThreadedFixedSystem, World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addThreadedFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         world.sys.addThreadedFixedCondSys(cond, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(LateSystem, World&)> || std::same_as<Funcs, void(&)(LateSystem, World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addLateSys(Funcs&&... funcs) noexcept {
         world.sys.addLateCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(LateSystem, World&)> || std::same_as<Funcs, void(&)(LateSystem, World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addLateCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         world.sys.addLateCondSys(cond, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(LateFixedSystem, World&)> || std::same_as<Funcs, void(&)(LateFixedSystem, World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addLateFixedSys(Funcs&&... funcs) noexcept {
         world.sys.addLateFixedCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(World&)> || std::same_as<Funcs, void(&)(World&) noexcept>) && ...)
+    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(LateFixedSystem, World&)> || std::same_as<Funcs, void(&)(LateFixedSystem, World&) noexcept>) && ...)
     [[nodiscard]] ZerEngine& addLateFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         world.sys.addLateFixedCondSys(cond, std::forward<Funcs>(funcs)...);
         return *this;
