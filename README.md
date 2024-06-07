@@ -95,7 +95,7 @@ void playerDashSys(ThreadedSystem, World& world) {
 
     for (auto [playerEnt, playerDash, velocity]: players) {
         if (playerDash.canStopDash(time.deltaTime())) {
-            world.del<PlayerDash>(playerEnt);
+            world.remove<PlayerDash>(playerEnt);
             velocity.x = 0;
         } else {
             velocity.x += playerDash.dashSpeed;
@@ -112,19 +112,19 @@ int main() {
     ZerEngine()
         .useMultithreading(true) // <== optional
         .setFixedTimeStep(0.02f) // <== Set fixed time step for fixed systems
-        .addRes<AppState>(AppState::IN_GAME)
+        .addResource<AppState>(AppState::IN_GAME)
         .addStartSys(initPos)
-        .addMainSys(stopRunSys)
-        .addThreadedSys(playerActionSys, playerDashSys) // Systems work at the same time
-        .addThreadedFixedSys(movePosSys) // <== Systems work at fixed time
-        .addThreadedCondSys(
+        .addMainSystems(stopRunSys)
+        .addThreadedSystems(playerActionSys, playerDashSys) // Systems work at the same time
+        .addThreadedFixedSystems(movePosSys) // <== Systems work at fixed time
+        .addThreadedConditionSystems(
             [](World& world) -> bool {
-                auto [appState] = world.getRes<const AppState>();
+                auto [appState] = world.resource<const AppState>();
                 return appState == AppState::IN_GAME;
             },
             /** This Systems only runs if condition is true **/
         )
-        .addLateSys(/*...*/)
+        .addLateSystems(/*...*/)
         .run();
 
     return 0;

@@ -208,7 +208,7 @@ private:
         comps.emplace(ent, oth.comps.at(ent));
     }
 
-    constexpr void del(const Ent ent) noexcept {
+    constexpr void remove(const Ent ent) noexcept {
         comps.erase(ent);
     }
 
@@ -293,7 +293,7 @@ private:
         oldArch.destroy(ent);
     }
 
-    void del(const Ent ent, Archetype& oldArch, const Type type) noexcept {
+    void remove(const Ent ent, Archetype& oldArch, const Type type) noexcept {
         ents.emplace(ent);
         for (const auto& pair: oldArch.pools) {
             if (pair.first != type) {
@@ -318,7 +318,7 @@ private:
     void destroy(const Ent ent) noexcept {
         ents.erase(ent);
         for (auto& pool: pools) {
-            pool.second->del(ent);
+            pool.second->remove(ent);
         }
     }
 
@@ -575,7 +575,7 @@ private:
         removeOldArchIfEmpty(oldArch);
     }
 
-    void del(const Ent ent, const Type type) noexcept {
+    void remove(const Ent ent, const Type type) noexcept {
         auto entArchIt = entArch.find(ent);
         if (entArchIt == entArch.end()) {
             printf("ZerEngine: Impossible de supprimer un composant sur une entite inexistante - [%zu]\n", ent);
@@ -597,7 +597,7 @@ private:
         }
         for (auto* arch: compatiblesArchs) {
             if (arch->isTotalyCompatibleWithoutLate(*oldArch, type)) {
-                arch->del(ent, *oldArch, type);
+                arch->remove(ent, *oldArch, type);
                 entArchIt->second = arch;
                 removeOldArchIfEmpty(oldArch);
                 return;
@@ -927,7 +927,7 @@ private:
         }
     }
 
-    void del(const Ent ent, const Type type) noexcept {
+    void remove(const Ent ent, const Type type) noexcept {
         std::unique_lock<std::mutex> lock(mtx);
         if (!delEnts.contains(ent)) {
             auto addEntsIt = addEnts.find(ent);
@@ -1007,7 +1007,7 @@ private:
 
         for (const auto& pair: delComps) {
             for (const auto& type: pair.second) {
-                reg.del(pair.first, type);
+                reg.remove(pair.first, type);
             }
         }
 
@@ -1725,15 +1725,15 @@ public:
     }
 
     template <typename T, typename... Ts>
-    void del(const Ent ent) noexcept {
+    void remove(const Ent ent) noexcept {
         if (reg.has(ent, {typeid(T).hash_code()})) {
-            lateUpgrade.del(ent, typeid(T).hash_code());
+            lateUpgrade.remove(ent, typeid(T).hash_code());
         } else {
-            printf("World::del(): Impossible de supprimer un composant qui n'existe pas - %s\n", typeid(T).name());
+            printf("World::remove(): Impossible de supprimer un composant qui n'existe pas - %s\n", typeid(T).name());
         }
 
         if constexpr (sizeof...(Ts) > 0) {
-            del<Ts...>(ent);
+            remove<Ts...>(ent);
         }
     }
 
@@ -1747,7 +1747,7 @@ public:
 
     void setActive(const Ent ent) noexcept {
         if (has<IsInactive>(ent)) {
-            del<IsInactive>(ent);
+            remove<IsInactive>(ent);
             if (auto childrenOpt = getChildren(ent)) {
                 for (auto childEnt: childrenOpt.value().get()) {
                     setActive(childEnt);
@@ -1830,7 +1830,7 @@ public:
     }
 
     template <typename T, typename... Args> requires (std::copy_constructible<T>)
-    [[nodiscard]] ZerEngine& addRes(Args&&... args) noexcept {
+    [[nodiscard]] ZerEngine& addResource(Args&&... args) noexcept {
         world.res.emplace(typeid(T).hash_code(), std::make_any<T>(std::forward<Args>(args)...));
         return *this;
     }
@@ -1841,79 +1841,79 @@ public:
         return *this;
     }
 
-    [[nodiscard]] ZerEngine& addStartSys(void(*const func)(StartSystem, World&)) noexcept {
+    [[nodiscard]] ZerEngine& addStartSystems(void(*const func)(StartSystem, World&)) noexcept {
         world.sys.addStartSys(func);
         return *this;
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(MainSystem, World&)> || std::same_as<Funcs, void(&)(MainSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addMainSys(Funcs&&... funcs) noexcept {
+    [[nodiscard]] ZerEngine& addMainSystems(Funcs&&... funcs) noexcept {
         world.sys.addMainCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(MainSystem, World&)> || std::same_as<Funcs, void(&)(MainSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addMainCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
+    [[nodiscard]] ZerEngine& addMainConditionSystems(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         world.sys.addMainCondSys(cond, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(MainFixedSystem, World&)> || std::same_as<Funcs, void(&)(MainFixedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addMainFixedSys(Funcs&&... funcs) noexcept {
+    [[nodiscard]] ZerEngine& addMainFixedSystems(Funcs&&... funcs) noexcept {
         world.sys.addMainFixedCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(MainFixedSystem, World&)> || std::same_as<Funcs, void(&)(MainFixedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addMainFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
+    [[nodiscard]] ZerEngine& addMainFixedConditionSystems(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         world.sys.addMainFixedCondSys(cond, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(ThreadedSystem, World&)> || std::same_as<Funcs, void(&)(ThreadedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addThreadedSys(Funcs&&... funcs) noexcept {
+    [[nodiscard]] ZerEngine& addThreadedSystems(Funcs&&... funcs) noexcept {
         world.sys.addThreadedCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(ThreadedSystem, World&)> || std::same_as<Funcs, void(&)(ThreadedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addThreadedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
+    [[nodiscard]] ZerEngine& addThreadedConditionSystems(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         world.sys.addThreadedCondSys(cond, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(ThreadedFixedSystem, World&)> || std::same_as<Funcs, void(&)(ThreadedFixedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addThreadedFixedSys(Funcs&&... funcs) noexcept {
+    [[nodiscard]] ZerEngine& addThreadedFixedSystems(Funcs&&... funcs) noexcept {
         world.sys.addThreadedFixedCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(ThreadedFixedSystem, World&)> || std::same_as<Funcs, void(&)(ThreadedFixedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addThreadedFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
+    [[nodiscard]] ZerEngine& addThreadedFixedConditionSystems(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         world.sys.addThreadedFixedCondSys(cond, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(LateSystem, World&)> || std::same_as<Funcs, void(&)(LateSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addLateSys(Funcs&&... funcs) noexcept {
+    [[nodiscard]] ZerEngine& addLateSystems(Funcs&&... funcs) noexcept {
         world.sys.addLateCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(LateSystem, World&)> || std::same_as<Funcs, void(&)(LateSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addLateCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
+    [[nodiscard]] ZerEngine& addLateConditionSystems(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         world.sys.addLateCondSys(cond, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(LateFixedSystem, World&)> || std::same_as<Funcs, void(&)(LateFixedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addLateFixedSys(Funcs&&... funcs) noexcept {
+    [[nodiscard]] ZerEngine& addLateFixedSystems(Funcs&&... funcs) noexcept {
         world.sys.addLateFixedCondSys(nullptr, std::forward<Funcs>(funcs)...);
         return *this;
     }
 
     template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(LateFixedSystem, World&)> || std::same_as<Funcs, void(&)(LateFixedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addLateFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
+    [[nodiscard]] ZerEngine& addLateFixedConditionSystems(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
         world.sys.addLateFixedCondSys(cond, std::forward<Funcs>(funcs)...);
         return *this;
     }
