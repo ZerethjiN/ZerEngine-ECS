@@ -1,115 +1,205 @@
 #pragma once
 
+#include <any>
+#include <cmath>
+#include <chrono>
+#include <concepts>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdlib>
+#include <ctime>
+#include <functional>
+#include <initializer_list>
+#include <iterator>
+#include <mutex>
+#include <optional>
+#include <print>
+#include <string>
+#include <thread>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
-#include <string>
-#include <iostream>
-#include <any>
-#include <thread>
-#include <condition_variable>
-#include <mutex>
-#include <queue>
-#include <semaphore>
-#include <functional>
-#include <concepts>
-#include <optional>
 
 using Ent = std::size_t;
 using Type = std::size_t;
 
 template <typename... Filters>
-struct With final {};
+class With final {};
 template <typename... Filters>
-constinit With<Filters...> with;
+constexpr inline With<Filters...> with;
 
 template <typename... Excludes>
-struct Without final {};
+class Without final {};
 template <typename... Excludes>
-constinit Without<Excludes...> without;
+constexpr inline Without<Excludes...> without;
 
-struct WithInactive final {};
-constinit WithInactive withInactive;
+class WithInactive final {};
+constexpr inline WithInactive withInactive;
 
 class IsInactive final {};
 class DontDestroyOnLoad final {};
 
-class StartSystem final {};
-class MainSystem final {};
-class MainFixedSystem final {};
-class ThreadedSystem final {};
-class ThreadedFixedSystem final {};
-class LateSystem final {};
-class LateFixedSystem final {};
+class ISystem {
+protected:
+    constexpr ISystem() noexcept = default;
+};
+
+class StartSystem final: protected ISystem {};
+constexpr inline StartSystem startSystem;
+class MainSystem final: protected ISystem {};
+constexpr inline MainSystem mainSystem;
+class MainFixedSystem final: protected ISystem {};
+constexpr inline MainFixedSystem mainFixedSystem;
+class MainUnscaledFixedSystem final: protected ISystem {};
+constexpr inline MainUnscaledFixedSystem mainUnscaledFixedSystem;
+class ThreadedSystem final: protected ISystem {};
+constexpr inline ThreadedSystem threadedSystem;
+class ThreadedFixedSystem final: protected ISystem {};
+constexpr inline ThreadedFixedSystem threadedFixedSystem;
+class ThreadedUnscaledFixedSystem final: protected ISystem {};
+constexpr inline ThreadedUnscaledFixedSystem threadedUnscaledFixedSystem;
+class LateSystem final: protected ISystem {};
+constexpr inline LateSystem lateSystem;
+class LateFixedSystem final: protected ISystem {};
+constexpr inline LateFixedSystem lateFixedSystem;
+class LateUnscaledFixedSystem final: protected ISystem {};
+constexpr inline LateUnscaledFixedSystem lateUnscaledFixedSystem;
+
+class SceneSystem final {};
+
+template <typename T, typename... FutureTs, typename... PastTs>
+[[nodiscard]] consteval auto impl_is_not_same_rec(With<PastTs...>) noexcept -> bool {
+    const bool not_same = std::disjunction_v<std::disjunction<std::is_same<T, FutureTs>...>, std::disjunction<std::is_same<T, PastTs>...>>;
+    if constexpr (!not_same && sizeof...(FutureTs) > 0) {
+        return impl_is_not_same_rec<FutureTs...>(with<T, PastTs...>);
+    }
+    return not_same;
+}
+
+template <typename... Ts>
+concept IsNotSameConcept = [] -> bool {
+    if constexpr (sizeof...(Ts) > 0) {
+        static_assert(!impl_is_not_same_rec<std::remove_cv<std::remove_reference<Ts>>...>(with<>), "Impossible de requeter des types en doublons");
+    }
+    return true;
+}();
+
+template <typename T>
+concept IsNotEmptyConcept = [] -> bool {
+    static_assert(!std::is_empty_v<T>, "Impossible de requeter un Marker (objet de taille 0)");
+    return true;
+}();
+
+template <typename T>
+concept IsFinalConcept = [] -> bool {
+    static_assert(std::is_final_v<T>, "Impossible d'ajouter un composant non final (class *** final {})");
+    return true;
+}();
 
 ///////////////////////////////////////////////////////////////////////////////////
 
-// class Comp {
+// class CompAny final {
 // public:
-//     constexpr Comp() noexcept:
+//     constexpr CompAny() noexcept:
 //         manager(nullptr) {
 //     }
 
-//     Comp(const Comp& othComp) {
-//         if (!othComp.has_value()) {
+//     CompAny(const CompAny& other) {
+//         if (!other.has_value()) {
 //             manager = nullptr;
 //         } else {
-//             Arg arg;
-//             arg.comp = this;
-//             othComp.manager(OP_CLONE, &othComp, &arg);
+//             CompArg arg;
+//             arg.any = this;
+//             other.manager(OP_CLONE, &other, &arg);
 //         }
 //     }
 
-//     Comp(Comp&& othComp) {
-//         if (!othComp.has_value()) {
+//     CompAny(CompAny&& other) noexcept {
+//         if (!other.has_value()) {
 //             manager = nullptr;
 //         } else {
-//             Arg arg;
-//             arg.comp = this;
-//             othComp.manager(OP_TRANSFERT, &othComp, &arg);
+//             CompArg arg;
+//             arg.any = this;
+//             other.manager(OP_TRANSFER, &other, &arg);
 //         }
 //     }
 
-//     template <typename T> requires (std::copy_constructible<T> && !std::same_as<T, Comp>)
-//     Comp(T&& newComp):
-//         data(new T(std::forward<T>(newComp))),
-//         manager(managerFunc<T>) {
+//     template <typename T> requires (std::copy_constructible<T>)
+//     CompAny(T&& value):
+//         data(new T{std::move(value)}),
+//         manager(&compAnyManager<T>) {
 //     }
 
-//     template <typename T, typename... Args>
-//     Comp(std::in_place_type_t<T>, Args&&... args):
-//         data(new T(std::forward<Args>(args)...)),
-//         manager(managerFunc<T>) {
+//     template <typename T, typename... Args> requires (std::constructible_from<T, Args...>)
+//     CompAny(std::in_place_type_t<T>, Args&&... args):
+//         data(new T{std::forward<Args>(args)...}),
+//         manager(&compAnyManager<T>) {
 //     }
 
-//     ~Comp() {
+//     ~CompAny() {
 //         reset();
 //     }
 
-//     Comp& operator =(const Comp& othComp) {
-//         *this = Comp(othComp);
+//     CompAny& operator=(const CompAny& rhs) {
+//         *this = CompAny(rhs);
 //         return *this;
 //     }
 
-//     Comp& operator =(Comp&& othComp) {
-//         if (!othComp.has_value()) {
+//     CompAny& operator=(CompAny&& rhs) noexcept {
+//         if (!rhs.has_value()) {
 //             reset();
-//         } else if (this != &othComp) {
+//         } else if (this != &rhs) {
 //             reset();
-//             Arg arg;
-//             arg.comp = this;
-//             othComp.manager(OP_TRANSFERT, &othComp, &arg);
+//             CompArg arg;
+//             arg.any = this;
+//             rhs.manager(OP_TRANSFER, &rhs, &arg);
 //         }
 //         return *this;
 //     }
 
-//     template <typename T>
-//     Comp& operator =(T&& othComp) {
-//         *this = Comp(std::forward<T>(othComp));
+//     template <typename T> requires (std::copy_constructible<T>)
+//     CompAny& operator=(T&& rhs) {
+//         *this = CompAny(std::move(rhs));
 //         return *this;
 //     }
 
 // public:
+//     template <typename T, typename... Args> requires (std::constructible_from<T, Args...>)
+//     T& emplace(Args&&... args) {
+//         data = new T{std::forward<Args>(args)...};
+//         manager = &compAnyManager<T>;
+//         return *static_cast<T*>(data);
+//     }
+
+//     void swap(CompAny& rhs) noexcept {
+//         if (!has_value() && !rhs.has_value()) {
+//             return;
+//         }
+
+//         if (has_value() && rhs.has_value()) {
+//             if (this == &rhs) {
+//                 return;
+//             }
+
+//             CompAny tmp;
+//             CompArg arg;
+//             arg.any = &tmp;
+//             rhs.manager(OP_TRANSFER, &rhs, &arg);
+//             arg.any = &rhs;
+//             manager(OP_TRANSFER, this, &arg);
+//             arg.any = this;
+//             tmp.manager(OP_TRANSFER, &tmp, &arg);
+//         } else {
+//             CompAny* empty = !has_value() ? this : &rhs;
+//             CompAny* full = !has_value() ? &rhs : this;
+//             CompArg arg;
+//             arg.any = empty;
+//             full->manager(OP_TRANSFER, full, &arg);
+//         }
+//     }
+
 //     void reset() noexcept {
 //         if (has_value()) {
 //             manager(OP_DESTROY, this, nullptr);
@@ -117,69 +207,70 @@ class LateFixedSystem final {};
 //         }
 //     }
 
+//     bool has_value() const {
+//         return manager != nullptr;
+//     }
+
 //     const std::type_info& type() const noexcept {
 //         if (!has_value()) {
 //             return typeid(void);
 //         }
-//         Arg arg;
-//         manager(OP_GET_TYPE, this, &arg);
-//         return *arg.typeInfo;
+//         CompArg arg;
+//         manager(OP_TYPE, this, &arg);
+//         return *arg.typeinfo;
 //     }
 
-//     [[nodiscard]] bool has_value() const noexcept {
-//         return manager != nullptr;
+// private:
+//     enum CompOp: uint8_t {
+//         OP_ACCESS, OP_TYPE, OP_CLONE, OP_DESTROY, OP_TRANSFER
+//     };
+
+//     union CompArg {
+//         void* data;
+//         const std::type_info* typeinfo;
+//         CompAny* any;
+//     };
+
+// private:
+//     template <typename T>
+//     static void compAnyManager(CompOp op, const CompAny* any, CompArg* arg) {
+//         auto ptr = static_cast<const T*>(any->data);
+//         switch (op) {
+//             case CompOp::OP_ACCESS:
+//                 arg->data = const_cast<T*>(ptr);
+//                 break;
+//             case CompOp::OP_TYPE:
+//                 arg->typeinfo = &typeid(T);
+//                 break;
+//             case CompOp::OP_CLONE:
+//                 arg->any->data = new T{*ptr};
+//                 arg->any->manager = any->manager;
+//                 break;
+//             case CompOp::OP_DESTROY:
+//                 delete ptr;
+//                 break;
+//             case CompOp::OP_TRANSFER:
+//                 arg->any->data = any->data;
+//                 arg->any->manager = any->manager;
+//                 const_cast<CompAny*>(any)->manager = nullptr;
+//                 break;
+//         }
 //     }
 
 // public:
-//     template <typename T>
-//     friend T* compCast(const Comp* comp) noexcept {
-//         if (comp && comp->type() == typeid(T)) {
-//             return static_cast<T*>(comp->data);
+//     template <typename T> requires (!std::same_as<T, void> && (std::copy_constructible<T> || std::is_rvalue_reference_v<T> || std::is_lvalue_reference_v<T>))
+//     constexpr std::optional<T> comp_any_cast(CompAny& any) {
+//         if (any.manager == &CompAny::compAnyManager<T> || any.type() == typeid(T)) {
+//             CompArg arg;
+//             any.manager(OP_ACCESS, &any, &arg);
+//             return static_cast<T>(*arg.data);
 //         }
-//         printf("CompCast Impossible: Comp<%s> voulu en %s", comp->type().name(), typeid(T).name());
-//         return nullptr;
-//     }
-
-// private:
-//     enum Op {
-//         OP_ACCESS, OP_GET_TYPE, OP_CLONE, OP_DESTROY, OP_TRANSFERT
-//     };
-
-//     union Arg {
-//         void* obj;
-//         const std::type_info* typeInfo;
-//         Comp* comp;
-//     };
-
-// private:
-//     template <typename T>
-//     static void managerFunc(Op op, const Comp* comp, Arg* arg) {
-//         const T* ptr = static_cast<const T*>(comp->data);
-//         switch (op) {
-//             case OP_ACCESS:
-//                 arg->obj = const_cast<T*>(ptr);
-//                 break;
-//             case OP_GET_TYPE:
-//                 arg->typeInfo = &typeid(T);
-//                 break;
-//             case OP_CLONE:
-//                 arg->comp->data = new T(*ptr);
-//                 arg->comp->manager = comp->manager;
-//                 break;
-//             case OP_DESTROY:
-//                 delete ptr;
-//                 break;
-//             case OP_TRANSFERT:
-//                 arg->comp->data = comp->data;
-//                 arg->comp->manager = comp->manager;
-//                 const_cast<Comp*>(comp)->manager = nullptr;
-//                 break;
-//         }
+//         return std::nullopt;
 //     }
 
 // private:
 //     void* data;
-//     void(*manager)(Op, const Comp*, Arg*);
+//     void(*manager)(CompOp, const CompAny*, CompArg*);
 // };
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -188,28 +279,27 @@ class CompPool final {
 friend class Archetype;
 friend class LiteArchetype;
 friend class LateUpgrade;
-private:
-    CompPool() noexcept = default;
-
-    CompPool(const Ent ent, const std::any& a) noexcept:
-        comps({{ent, a}}) {
+public:
+    [[nodiscard]] CompPool() noexcept = default;
+    [[nodiscard]] CompPool(const Ent& entity, const std::any& component) noexcept:
+        comps({{entity, component}}) {
     }
 
 private:
-    constexpr void emplace(const Ent ent, const std::any& a) noexcept {
-        comps.emplace(ent, a);
+    constexpr auto insert_entity(this auto& self, const Ent& entity, const std::any& component) noexcept -> void {
+        self.comps.emplace(entity, component);
     }
 
-    [[nodiscard]] constexpr auto&& get(this auto&& self, const Ent ent) noexcept {
-        return std::move(self).comps.at(ent);
+    [[nodiscard]] constexpr auto get_entity(this auto& self, const Ent& entity) noexcept -> auto& {
+        return self.comps.at(entity);
     }
 
-    constexpr void copy(const Ent ent, const CompPool& oth) noexcept {
-        comps.emplace(ent, oth.comps.at(ent));
+    constexpr auto copy_entity(this auto& self, const Ent& entity, const CompPool& oth) noexcept -> void {
+        self.comps.emplace(entity, oth.comps.at(entity));
     }
 
-    constexpr void remove(const Ent ent) noexcept {
-        comps.erase(ent);
+    constexpr auto remove_entity(this auto& self, const Ent& entity) noexcept -> void {
+        self.comps.erase(entity);
     }
 
 private:
@@ -219,10 +309,10 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////
 
 struct ArchetypeCreateWith final {};
-constinit ArchetypeCreateWith archetypeCreateWith;
+constexpr ArchetypeCreateWith archetypeCreateWith;
 
 struct ArchetypeCreateWithout final {};
-constinit ArchetypeCreateWithout archetypeCreateWithout;
+constexpr ArchetypeCreateWithout archetypeCreateWithout;
 
 class Archetype final {
 friend class Registry;
@@ -230,40 +320,48 @@ friend class LiteArchetype;
 friend class LateUpgrade;
 template<typename... Ts>
 friend class View;
-private:
+public:
     Archetype() noexcept = default;
 
-    Archetype(const Ent ent, const std::unordered_map<Type, std::any>& anyes) noexcept:
+    Archetype(const Ent& ent, const std::unordered_map<Type, std::any>& components) noexcept:
         ents({ent}),
-        pools(anyes.size()) {
-        for (const auto& pair: anyes) {
-            pools.emplace(pair.first, new CompPool(ent, pair.second));
+        pools(components.size()) {
+        for (const auto& pair: components) {
+            pools.emplace(
+                std::piecewise_construct,
+                std::forward_as_tuple(pair.first),
+                std::forward_as_tuple(ent, pair.second)
+            );
         }
     }
 
-    Archetype(ArchetypeCreateWith, Archetype& oldArch, const Ent ent, const std::any& a) noexcept:
+    Archetype(ArchetypeCreateWith, Archetype& oldArch, const Ent& ent, const std::any& component) noexcept:
         ents({ent}),
         pools(oldArch.pools.size() + 1) {
         for (const auto& pair: oldArch.pools) {
             pools.emplace(
                 std::piecewise_construct,
                 std::forward_as_tuple(pair.first),
-                std::forward_as_tuple(new CompPool(ent, pair.second->comps.at(ent)))
+                std::forward_as_tuple(ent, pair.second.comps.at(ent))
             );
         }
-        pools.emplace(a.type().hash_code(), new CompPool(ent, a));
+        pools.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(component.type().hash_code()),
+            std::forward_as_tuple(ent, component)
+        );
         oldArch.destroy(ent);
     }
 
-    Archetype(ArchetypeCreateWithout, Archetype& oldArch, const Ent ent, const Type type) noexcept:
+    Archetype(ArchetypeCreateWithout, Archetype& oldArch, const Ent& ent, const Type& component_type) noexcept:
         ents({ent}),
         pools(oldArch.pools.size() - 1) {
         for (const auto& pair: oldArch.pools) {
-            if (pair.first != type) {
+            if (pair.first != component_type) {
                 pools.emplace(
                     std::piecewise_construct,
                     std::forward_as_tuple(pair.first),
-                    std::forward_as_tuple(new CompPool(ent, pair.second->comps.at(ent)))
+                    std::forward_as_tuple(ent, pair.second.comps.at(ent))
                 );
             }
         }
@@ -271,109 +369,100 @@ private:
     }
 
 private:
-    ~Archetype() noexcept {
-        for (auto& pair: pools) {
-            delete pair.second;
+    constexpr auto new_entity(this auto& self, const Ent& entity, const std::unordered_map<Type, std::any>& components) noexcept -> void {
+        self.ents.emplace(entity);
+        for (const auto& pair: components) {
+            self.pools.at(pair.first).insert_entity(entity, pair.second);
         }
     }
 
-    void newEnt(const Ent ent, const std::unordered_map<Type, std::any>& anyes) noexcept {
-        ents.emplace(ent);
-        for (const auto& pair: anyes) {
-            pools.at(pair.first)->emplace(ent, pair.second);
-        }
-    }
-
-    void add(const Ent ent, Archetype& oldArch, const std::any& a) noexcept {
-        ents.emplace(ent);
+    constexpr auto add_component(this auto& self, const Ent& entity, Archetype& oldArch, const std::any& component) noexcept -> void {
+        self.ents.emplace(entity);
         for (const auto& pair: oldArch.pools) {
-            pools.at(pair.first)->copy(ent, *pair.second);
+            self.pools.at(pair.first).copy_entity(entity, pair.second);
         }
-        pools.at(a.type().hash_code())->emplace(ent, a);
-        oldArch.destroy(ent);
+        self.pools.at(component.type().hash_code()).insert_entity(entity, component);
+        oldArch.destroy(entity);
     }
 
-    void remove(const Ent ent, Archetype& oldArch, const Type type) noexcept {
-        ents.emplace(ent);
+    constexpr auto remove_component(this auto& self, const Ent& entity, Archetype& oldArch, const Type& component_type) noexcept -> void {
+        self.ents.emplace(entity);
         for (const auto& pair: oldArch.pools) {
-            if (pair.first != type) {
-                pools.at(pair.first)->copy(ent, *pair.second);
+            if (pair.first != component_type) {
+                self.pools.at(pair.first).copy_entity(entity, pair.second);
             }
         }
-        oldArch.destroy(ent);
+        oldArch.destroy(entity);
     }
 
-    [[nodiscard]] auto&& get(this auto&& self, const Ent ent, const Type type) noexcept {
-        return self.pools.at(type)->get(ent);
+    [[nodiscard]] constexpr auto get(this auto& self, const Ent& entity, const Type& component_type) noexcept -> auto&& {
+        return self.pools.at(component_type).get_entity(entity);
     }
 
-    [[nodiscard]] const std::vector<std::string> getTypes(const Ent ent) const noexcept {
+    [[nodiscard]] constexpr auto getTypes(this const auto& self, const Ent& entity) noexcept -> const std::vector<std::string> {
         std::vector<std::string> types;
-        for (auto& pool: pools) {
-            types.emplace_back(pool.second->comps.at(ent).type().name());
+        for (auto& pool: self.pools) {
+            types.emplace_back(pool.second.comps.at(entity).type().name());
         }
         return types;
     }
 
-    void destroy(const Ent ent) noexcept {
-        ents.erase(ent);
-        for (auto& pool: pools) {
-            pool.second->remove(ent);
+    auto destroy(this auto& self, const Ent& entity) noexcept -> void {
+        self.ents.erase(entity);
+        for (auto& pool: self.pools) {
+            pool.second.remove_entity(entity);
         }
     }
 
-    [[nodiscard]] constexpr bool empty() const noexcept {
-        return ents.empty();
+    [[nodiscard]] constexpr auto empty(this const auto& self) noexcept -> bool {
+        return self.ents.empty();
     }
 
-    [[nodiscard]] constexpr std::size_t size() const noexcept {
-        return ents.size();
+    [[nodiscard]] constexpr auto size(this const auto& self) noexcept -> std::size_t {
+        return self.ents.size();
     }
 
-    [[nodiscard]] constexpr bool contains(const Type type) const noexcept {
-        return pools.contains(type);
+    [[nodiscard]] constexpr auto containsType(this const auto& self, const Type type) noexcept -> bool {
+        return self.pools.contains(type);
     }
 
 private:
     template <typename... Ts>
-    [[nodiscard]] constexpr std::tuple<const Ent, Ts&...> getTupleWithEnt(const Ent ent) noexcept {
-        return std::forward_as_tuple(ent, std::any_cast<Ts&>(get(ent, typeid(Ts).hash_code()))...);
+    [[nodiscard]] constexpr auto getTupleWithEnt(this auto& self, const Ent& entity) noexcept -> std::tuple<const Ent&, Ts&...> {
+        return std::forward_as_tuple(entity, std::any_cast<Ts&>(self.get(entity, typeid(Ts).hash_code()))...);
     }
 
 private:
-    [[nodiscard]] bool isTotalyCompatibleLate(const std::unordered_map<Type, std::any>& anyes) const noexcept {
-        if (anyes.size() != pools.size()) {
+    [[nodiscard]] constexpr auto isTotalyCompatibleLate(this const auto& self, const std::unordered_map<Type, std::any>& components) noexcept -> bool {
+        if (components.size() != self.pools.size()) {
             return false;
         }
-        for (const auto& pair: anyes) {
-            if (!pools.contains(pair.first)) {
+        for (const auto& pair: components) {
+            if (!self.pools.contains(pair.first)) {
                 return false;
             }
         }
         return true;
     }
 
-    [[nodiscard]] bool isTotalyCompatibleLate(const Archetype& oldArch, const Type type) const noexcept {
-        if (oldArch.pools.size() + 1 != pools.size()) {
-            return false;
-        }
-        if (!pools.contains(type)) {
+    [[nodiscard]] constexpr auto isTotalyCompatibleLate(this const auto& self, const Archetype& oldArch, const Type& component_type) noexcept -> bool {
+        if (oldArch.pools.size() + 1 != self.pools.size() || !self.pools.contains(component_type)) {
             return false;
         }
         for (const auto& pair: oldArch.pools) {
-            if (!pools.contains(pair.first)) {
+            if (!self.pools.contains(pair.first)) {
                 return false;
             }
         }
         return true;
     }
 
-    [[nodiscard]] bool isTotalyCompatibleWithoutLate(const Archetype& oldArch, const Type type) const noexcept {
-        if (oldArch.pools.size() - 1 != pools.size() || pools.contains(type)) {
+    [[nodiscard]] constexpr auto isTotalyCompatibleWithoutLate(this const auto& self, const Archetype& oldArch, const Type& component_type) noexcept -> bool {
+        if (oldArch.pools.size() - 1 != self.pools.size() || self.pools.contains(component_type)) {
             return false;
         }
         for (const auto& pair: oldArch.pools) {
-            if (!pools.contains(pair.first) && pair.first != type) {
+            if (!self.pools.contains(pair.first) && pair.first != component_type) {
                 return false;
             }
         }
@@ -382,7 +471,7 @@ private:
 
 private:
     std::unordered_set<Ent> ents;
-    std::unordered_map<Type, CompPool*> pools;
+    std::unordered_map<Type, CompPool> pools;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -397,7 +486,7 @@ private:
     }
 
 public:
-    [[nodiscard]] bool empty() const noexcept {
+    [[nodiscard]] constexpr auto empty() const noexcept -> bool {
         if (archs.empty()) {
             return true;
         }
@@ -409,7 +498,7 @@ public:
         return true;
     }
 
-    [[nodiscard]] std::size_t size() const noexcept {
+    [[nodiscard]] constexpr auto size() const noexcept -> std::size_t {
         std::size_t newSize = 0;
         for (const auto* arch: archs) {
             newSize += arch->size();
@@ -437,11 +526,19 @@ private:
             }
         }
 
-        [[nodiscard]] value_type operator *() const noexcept {
+        ViewIterator(const ViewIterator&) = default;
+        ViewIterator(ViewIterator&&) = default;
+
+        auto operator=(const ViewIterator& oth) -> ViewIterator& = delete;
+        auto operator=(ViewIterator&& oth) -> ViewIterator& = delete;
+
+        ~ViewIterator() = default;
+
+        [[nodiscard]] constexpr auto operator *() const noexcept -> value_type {
             return (*archsIt)->getTupleWithEnt<Ts...>((*entsIt));
         }
 
-        [[nodiscard]] ViewIterator& operator ++() noexcept {
+        constexpr auto operator ++() noexcept -> ViewIterator& {
             entsIt++;
             if (entsIt == (*archsIt)->ents.end()) {
                 archsIt++;
@@ -452,7 +549,7 @@ private:
             return *this;
         }
 
-        [[nodiscard]] friend constexpr bool operator !=(const ViewIterator& a, const ViewIterator& b) noexcept {
+        [[nodiscard]] friend constexpr auto operator !=(const ViewIterator& a, const ViewIterator& b) noexcept -> bool {
             return a.archsIt != b.archsIt;
         }
 
@@ -463,11 +560,11 @@ private:
     };
 
 public:
-    [[nodiscard]] constexpr ViewIterator begin() const noexcept {
+    [[nodiscard]] constexpr auto begin() const noexcept -> ViewIterator{
         return {archs, archs.begin()};
     }
 
-    [[nodiscard]] constexpr ViewIterator end() const noexcept {
+    [[nodiscard]] constexpr auto end() const noexcept -> ViewIterator {
         return {archs, archs.end()};
     }
 
@@ -482,7 +579,7 @@ friend class World;
 friend class LateUpgrade;
 private:
     Registry() noexcept:
-        emptyArch(new Archetype()) {
+        emptyArch(std::make_unique<Archetype>()) {
     }
 
 private:
@@ -490,10 +587,9 @@ private:
         for (auto* arch: archs) {
             delete arch;
         }
-        delete emptyArch;
     }
 
-    [[nodiscard]] Ent getEntToken() noexcept {
+    [[nodiscard]] constexpr auto getEntToken() noexcept -> Ent {
         Ent ent = lastEnt++;
 
         if (!entTokens.empty()) {
@@ -502,34 +598,31 @@ private:
             entTokens.pop_back();
         }
 
-        entArch.emplace(ent, emptyArch);
+        entArch.emplace(ent, emptyArch.get());
 
         return ent;
     }
 
-    void newEnt(const Ent ent, const std::unordered_map<Type, std::any>& anyes) noexcept {
-        auto entArchIt = entArch.find(ent);
+    auto newEnt(const Ent& entity, const std::unordered_map<Type, std::any>& components) noexcept -> void {
+        auto entArchIt = entArch.find(entity);
         if (entArchIt->second->size() > 0) {
-            printf("ZerEngine: Impossible d'inserer une entité deja existante - [%zu]\n", ent);
+            std::println("ZerEngine: Impossible d'inserer une entité deja existante - [{}]", entity);
             return;
         }
 
         std::unordered_set<Archetype*> compatiblesArchs(archs);
-        for (const auto& pairAny: anyes) {
+        for (const auto& pairAny: components) {
             filterArchsByType(pairAny.first, compatiblesArchs);
         }
         for (auto* arch: compatiblesArchs) {
-            if (arch->isTotalyCompatibleLate(anyes)) {
-                arch->newEnt(ent, anyes);
+            if (arch->isTotalyCompatibleLate(components)) {
+                arch->new_entity(entity, components);
                 entArchIt->second = arch;
-                for (const auto& pair: arch->pools) {
-                    emplaceArchByType(pair.first, arch);
-                }
                 return;
             }
         }
 
-        auto* arch = new Archetype(ent, anyes);
+        auto* arch = new Archetype(entity, components);
         archs.emplace(arch);
         entArchIt->second = arch;
         for (const auto& pair: arch->pools) {
@@ -537,15 +630,15 @@ private:
         }
     }
 
-    void add(const Ent ent, const std::any& any) noexcept {
-        auto entArchIt = entArch.find(ent);
+    auto add(const Ent& entity, const std::any& component) noexcept -> void {
+        auto entArchIt = entArch.find(entity);
         if (entArchIt == entArch.end()) {
-            printf("ZerEngine: Impossible d'ajouter un composant sur une entité inexistante - [%zu]\n", ent);
+            std::println("ZerEngine: Impossible d'ajouter un composant sur une entité inexistante - [{}]", entity);
             return;
         }
 
-        if (entArchIt->second->contains(any.type().hash_code())) {
-            printf("ZerEngine: Impossible d'ajouter 2 composants identiques  - [%zu] - %s\n", ent, any.type().name());
+        if (entArchIt->second->containsType(component.type().hash_code())) {
+            std::println("ZerEngine: Impossible d'ajouter 2 composants identiques  - [{}] - {}", entity, component.type().name());
             return;
         }
 
@@ -555,18 +648,18 @@ private:
         for (const auto& pairPools: oldArch->pools) {
             filterArchsByType(pairPools.first, compatiblesArchs);
         }
-        filterArchsByType(any.type().hash_code(), compatiblesArchs);
+        filterArchsByType(component.type().hash_code(), compatiblesArchs);
         for (auto* arch: compatiblesArchs) {
-            if (arch->isTotalyCompatibleLate(*oldArch, any.type().hash_code())) {
-                arch->add(ent, *oldArch, any);
+            if (arch->isTotalyCompatibleLate(*oldArch, component.type().hash_code())) {
+                arch->add_component(entity, *oldArch, component);
                 entArchIt->second = arch;
-                emplaceArchByType(any.type().hash_code(), arch);
+                emplaceArchByType(component.type().hash_code(), arch);
                 removeOldArchIfEmpty(oldArch);
                 return;
             }
         }
 
-        auto* arch = new Archetype(archetypeCreateWith, *oldArch, ent, any);
+        auto* arch = new Archetype(archetypeCreateWith, *oldArch, entity, component);
         archs.emplace(arch);
         entArchIt->second = arch;
         for (const auto& pair: arch->pools) {
@@ -575,15 +668,15 @@ private:
         removeOldArchIfEmpty(oldArch);
     }
 
-    void remove(const Ent ent, const Type type) noexcept {
-        auto entArchIt = entArch.find(ent);
+    auto remove(const Ent& entity, const Type& component_type) noexcept -> void {
+        auto entArchIt = entArch.find(entity);
         if (entArchIt == entArch.end()) {
-            printf("ZerEngine: Impossible de supprimer un composant sur une entite inexistante - [%zu]\n", ent);
+            std::println("ZerEngine: Impossible de supprimer un composant sur une entite inexistante - [{}]", entity);
             return;
         }
 
-        if (!entArchIt->second->contains(type)) {
-            printf("ZerEngine: Impossible de supprimer un composant qui n'existe pas - [%zu]\n", ent);
+        if (!entArchIt->second->containsType(component_type)) {
+            std::println("ZerEngine: Impossible de supprimer un composant qui n'existe pas - [{}]", entity);
             return;
         }
 
@@ -591,20 +684,20 @@ private:
 
         std::unordered_set<Archetype*> compatiblesArchs(archs);
         for (const auto& pairPools: oldArch->pools) {
-            if (pairPools.first != type) {
+            if (pairPools.first != component_type) {
                 filterArchsByType(pairPools.first, compatiblesArchs);
             }
         }
         for (auto* arch: compatiblesArchs) {
-            if (arch->isTotalyCompatibleWithoutLate(*oldArch, type)) {
-                arch->remove(ent, *oldArch, type);
+            if (arch->isTotalyCompatibleWithoutLate(*oldArch, component_type)) {
+                arch->remove_component(entity, *oldArch, component_type);
                 entArchIt->second = arch;
                 removeOldArchIfEmpty(oldArch);
                 return;
             }
         }
 
-        auto* arch = new Archetype(archetypeCreateWithout, *oldArch, ent, type);
+        auto* arch = new Archetype(archetypeCreateWithout, *oldArch, entity, component_type);
         archs.emplace(arch);
         entArchIt->second = arch;
         for (const auto& pair: arch->pools) {
@@ -613,12 +706,12 @@ private:
         removeOldArchIfEmpty(oldArch);
     }
 
-    [[nodiscard]] constexpr bool exist(const Ent ent) const noexcept {
-        return entArch.contains(ent);
+    [[nodiscard]] constexpr auto exist(const Ent& entity) const noexcept -> bool {
+        return entArch.contains(entity);
     }
 
-    [[nodiscard]] bool has(const Ent ent, const std::initializer_list<Type>& types) const noexcept {
-        auto entArchIt = entArch.find(ent);
+    [[nodiscard]] auto has(const Ent& entity, const std::initializer_list<Type>& types) const noexcept -> bool {
+        auto entArchIt = entArch.find(entity);
         if (entArchIt == entArch.end()) {
             return false;
         }
@@ -630,37 +723,36 @@ private:
         return true;
     }
 
-    [[nodiscard]] auto&& get(this auto&& self, const Ent ent, const Type type) noexcept {
-        return self.entArch.at(ent)->get(ent, type);
+    [[nodiscard]] constexpr auto get(this auto& self, const Ent& entity, const Type& component_type) noexcept -> auto&& {
+        return self.entArch.at(entity)->get(entity, component_type);
     }
 
-    const std::vector<std::string> getTypes(const Ent ent) const noexcept {
-        return entArch.at(ent)->getTypes(ent);
+    constexpr auto getTypes(const Ent& entity) const noexcept -> const std::vector<std::string> {
+        return entArch.at(entity)->getTypes(entity);
     }
 
-    void destroy(const Ent ent) noexcept {
-        auto entArchIt = entArch.find(ent);
+    auto destroy(const Ent& entity) noexcept -> void {
+        auto entArchIt = entArch.find(entity);
         if (entArchIt == entArch.end()) {
-            printf("ZerEngine: Impossible de detruire une entitée qui n'existe pas\n");
+            std::println("ZerEngine: Impossible de detruire une entitée qui n'existe pas");
             return;
         }
- 
+
         auto* arch = entArchIt->second;
-        arch->destroy(ent);
+        arch->destroy(entity);
         removeOldArchIfEmpty(arch);
         entArch.erase(entArchIt);
-        entTokens.push_back(ent);
-        detachChildren(ent);
-        removeParent(ent);
+        entTokens.push_back(entity);
+        detachChildren(entity);
+        removeParent(entity);
     }
 
-    void clean() noexcept {
+    auto clean() noexcept -> void {
         for (auto* arch: archs) {
             delete arch;
         }
-        delete emptyArch;
 
-        emptyArch = new Archetype();
+        emptyArch = std::make_unique<Archetype>();
         lastEnt = 1;
         entTokens.clear();
         archs.clear();
@@ -671,56 +763,118 @@ private:
     }
 
 private:
-    void appendChildren(const Ent parentEnt, const std::unordered_set<Ent>& childrenEnt) noexcept {
-        auto parentIt = parentChildrens.find(parentEnt);
+    constexpr auto appendChildrenInactiveRecDown(const Ent& parentEntity) noexcept -> void {
+        if (auto childrenOpt = getChildren(parentEntity)) {
+            for (auto childEnt: childrenOpt.value().get()) {
+                if (!has(childEnt, {typeid(IsInactive).hash_code()})) {
+                    add(childEnt, std::make_any<IsInactive>());
+                }
+                appendChildrenInactiveRecDown(childEnt);
+            }
+        }
+    }
+
+    constexpr auto appendChildrenInactiveRecUp(const Ent& parentEntity) noexcept -> void {
+        if (has(parentEntity, {typeid(IsInactive).hash_code()})) {
+            if (auto childrenOpt = getChildren(parentEntity)) {
+                for (auto childEnt: childrenOpt.value().get()) {
+                    if (!has(childEnt, {typeid(IsInactive).hash_code()})) {
+                        add(childEnt, std::make_any<IsInactive>());
+                    }
+                    appendChildrenInactiveRecDown(childEnt);
+                }
+            }
+            return;
+        }
+
+        if (auto parentOpt = getParent(parentEntity)) {
+            appendChildrenInactiveRecUp(parentOpt.value());
+        }
+    }
+
+    constexpr auto appendChildrenDontDestroyOnLoadRecDown(const Ent& parentEntity) noexcept -> void {
+        if (auto childrenOpt = getChildren(parentEntity)) {
+            for (auto childEnt: childrenOpt.value().get()) {
+                if (!has(childEnt, {typeid(DontDestroyOnLoad).hash_code()})) {
+                    add(childEnt, std::make_any<DontDestroyOnLoad>());
+                }
+                appendChildrenDontDestroyOnLoadRecDown(childEnt);
+            }
+        }
+    }
+
+    constexpr auto appendChildrenDontDestroyOnLoadRecUp(const Ent& parentEntity) noexcept -> void {
+        if (has(parentEntity, {typeid(DontDestroyOnLoad).hash_code()})) {
+            if (auto childrenOpt = getChildren(parentEntity)) {
+                for (auto childEnt: childrenOpt.value().get()) {
+                    if (!has(childEnt, {typeid(DontDestroyOnLoad).hash_code()})) {
+                        add(childEnt, std::make_any<DontDestroyOnLoad>());
+                    }
+                    appendChildrenDontDestroyOnLoadRecDown(childEnt);
+                }
+            }
+            return;
+        }
+
+        if (auto parentOpt = getParent(parentEntity)) {
+            appendChildrenDontDestroyOnLoadRecUp(parentOpt.value());
+        }
+    }
+
+    auto appendChildren(const Ent& parentEntity, const std::unordered_set<Ent>& childrenEnt) noexcept -> void {
+        auto parentIt = parentChildrens.find(parentEntity);
         if (parentIt == parentChildrens.end()) {
             parentIt = parentChildrens.emplace(
                 std::piecewise_construct,
-                std::forward_as_tuple(parentEnt),
+                std::forward_as_tuple(parentEntity),
                 std::forward_as_tuple()
             ).first;
         }
         for (const auto childEnt: childrenEnt) {
             if (childrenParent.contains(childEnt)) {
-                printf("Children: Tu ne peux pas avoir deux parents Billy[%zu]\n", childEnt);
-            } else if (parentEnt == childEnt) {
-                printf("Children: Impossible d'etre son propre pere\n");  
+                std::println("Children: Tu ne peux pas avoir deux parents Billy[{}]", childEnt);
+            } else if (parentEntity == childEnt) {
+                std::println("Children: Impossible d'etre son propre pere");
             } else {
-                childrenParent.emplace(childEnt, parentEnt);
+                childrenParent.emplace(childEnt, parentEntity);
                 parentIt->second.emplace(childEnt);
             }
         }
         if (parentIt->second.empty()) {
             parentChildrens.erase(parentIt);
         }
+        appendChildrenInactiveRecUp(parentEntity);
+        appendChildrenDontDestroyOnLoadRecUp(parentEntity);
     }
 
-    void appendChildren(const Ent parentEnt, const std::vector<Ent>& childrenEnt) noexcept {
-        auto parentIt = parentChildrens.find(parentEnt);
+    auto appendChildren(const Ent& parentEntity, const std::vector<Ent>& childrenEnt) noexcept -> void {
+        auto parentIt = parentChildrens.find(parentEntity);
         if (parentIt == parentChildrens.end()) {
             parentIt = parentChildrens.emplace(
                 std::piecewise_construct,
-                std::forward_as_tuple(parentEnt),
+                std::forward_as_tuple(parentEntity),
                 std::forward_as_tuple()
             ).first;
         }
         for (const auto childEnt: childrenEnt) {
             if (childrenParent.contains(childEnt)) {
-                printf("Children: Tu ne peux pas avoir deux parents Billy[%zu]\n", childEnt);
-            } else if (parentEnt == childEnt) {
-                printf("Children: Impossible d'etre son propre pere\n");  
+                std::println("Children: Tu ne peux pas avoir deux parents Billy[{}]", childEnt);
+            } else if (parentEntity == childEnt) {
+                std::println("Children: Impossible d'etre son propre pere");
             } else {
-                childrenParent.emplace(childEnt, parentEnt);
+                childrenParent.emplace(childEnt, parentEntity);
                 parentIt->second.emplace(childEnt);
             }
         }
         if (parentIt->second.empty()) {
             parentChildrens.erase(parentIt);
         }
+        appendChildrenInactiveRecUp(parentEntity);
+        appendChildrenDontDestroyOnLoadRecUp(parentEntity);
     }
 
-    void detachChildren(const Ent parentEnt) noexcept {
-        if (auto parentIt = parentChildrens.find(parentEnt); parentIt != parentChildrens.end()) {
+    auto detachChildren(const Ent& parentEntity) noexcept -> void {
+        if (auto parentIt = parentChildrens.find(parentEntity); parentIt != parentChildrens.end()) {
             for (const auto childEnt: parentIt->second) {
                 if (auto childrenIt = childrenParent.find(childEnt); childrenIt != childrenParent.end()) {
                     childrenParent.erase(childrenIt);
@@ -730,10 +884,10 @@ private:
         }
     }
 
-    void removeParent(const Ent childEnt) noexcept {
-        if (auto childrenIt = childrenParent.find(childEnt); childrenIt != childrenParent.end()) {
+    auto removeParent(const Ent& childEntity) noexcept -> void {
+        if (auto childrenIt = childrenParent.find(childEntity); childrenIt != childrenParent.end()) {
             if (auto parentIt = parentChildrens.find(childrenIt->second); parentIt != parentChildrens.end()) {
-                parentIt->second.erase(childEnt);
+                parentIt->second.erase(childEntity);
                 if (parentIt->second.empty()) {
                     parentChildrens.erase(parentIt);
                 }
@@ -742,23 +896,23 @@ private:
         }
     }
 
-    [[nodiscard]] bool hasChildren(const Ent parentEnt) const noexcept {
-        return parentChildrens.contains(parentEnt);
+    [[nodiscard]] constexpr auto hasChildren(const Ent& parentEntity) const noexcept -> bool {
+        return parentChildrens.contains(parentEntity);
     }
 
-    [[nodiscard]] std::optional<std::reference_wrapper<const std::unordered_set<Ent>>> getChildren(const Ent parentEnt) const noexcept {
-        if (auto parentIt = parentChildrens.find(parentEnt); parentIt != parentChildrens.end()) {
+    [[nodiscard]] auto getChildren(const Ent& parentEntity) const noexcept -> std::optional<std::reference_wrapper<const std::unordered_set<Ent>>> {
+        if (auto parentIt = parentChildrens.find(parentEntity); parentIt != parentChildrens.end()) {
             return std::make_optional<std::reference_wrapper<const std::unordered_set<Ent>>>(std::reference_wrapper<const std::unordered_set<Ent>>(parentIt->second));
         }
         return std::nullopt;
     }
 
-    [[nodiscard]] bool hasParent(const Ent childEnt) const noexcept {
-        return childrenParent.contains(childEnt);
+    [[nodiscard]] constexpr auto hasParent(const Ent& childEntity) const noexcept -> bool {
+        return childrenParent.contains(childEntity);
     }
 
-    [[nodiscard]] std::optional<Ent> getParent(const Ent childEnt) const noexcept {
-        if (auto childIt = childrenParent.find(childEnt); childIt != childrenParent.end()) {
+    [[nodiscard]] auto getParent(const Ent& childEntity) const noexcept -> std::optional<Ent> {
+        if (auto childIt = childrenParent.find(childEntity); childIt != childrenParent.end()) {
             return childIt->second;
         }
         return std::nullopt;
@@ -766,7 +920,7 @@ private:
 
 private:
     template <typename... Comps>
-    [[nodiscard]] const View<Comps...> view(const std::initializer_list<Type>& compFilterTypes, const std::initializer_list<Type>& excludeTypes) const noexcept {
+    [[nodiscard]] constexpr auto view(const std::initializer_list<Type>& compFilterTypes, const std::initializer_list<Type>& excludeTypes) const noexcept -> const View<Comps...> {
         std::unordered_set<Archetype*> internalArchs;
         if (compFilterTypes.size() > 0) {
             viewAddComp(internalArchs, compFilterTypes);
@@ -780,7 +934,7 @@ private:
     }
 
 private:
-    void viewAddComp(std::unordered_set<Archetype*>& internalArchs, const std::initializer_list<Type>& compTypes) const noexcept {
+    constexpr auto viewAddComp(std::unordered_set<Archetype*>& internalArchs, const std::initializer_list<Type>& compTypes) const noexcept -> void {
         std::size_t i = 0;
         for (const auto compType: compTypes) {
             if (i == 0) {
@@ -811,7 +965,7 @@ private:
         }
     }
 
-    void viewWithoutComp(std::unordered_set<Archetype*>& internalArchs, const std::initializer_list<Type>& compTypes) const noexcept {
+    constexpr auto viewWithoutComp(std::unordered_set<Archetype*>& internalArchs, const std::initializer_list<Type>& compTypes) const noexcept -> void {
         for (const auto compType: compTypes) {
             if (auto archsByTypeIt = archsByType.find(compType); archsByTypeIt != archsByType.end()) {
                 for (auto* arch: archsByTypeIt->second) {
@@ -823,9 +977,9 @@ private:
         }
     }
 
-    void filterArchsByType(const Type type, std::unordered_set<Archetype*>& compatibleArchs) noexcept {
+    auto filterArchsByType(const Type& component_type, std::unordered_set<Archetype*>& compatibleArchs) noexcept -> void {
         std::unordered_set<Archetype*> newArchs;
-        if (auto archsByTypeIt = archsByType.find(type); archsByTypeIt != archsByType.end()) {
+        if (auto archsByTypeIt = archsByType.find(component_type); archsByTypeIt != archsByType.end()) {
             for (auto* arch: archsByTypeIt->second) {
                 if (compatibleArchs.contains(arch)) {
                     newArchs.emplace(arch);
@@ -836,20 +990,20 @@ private:
     }
 
 private:
-    void emplaceArchByType(const Type type, Archetype* arch) noexcept {
-        if (auto archsByTypeIt = archsByType.find(type); archsByTypeIt != archsByType.end()) {
+    auto emplaceArchByType(const Type& component_type, Archetype* arch) noexcept -> void {
+        if (auto archsByTypeIt = archsByType.find(component_type); archsByTypeIt != archsByType.end()) {
             archsByTypeIt->second.emplace(arch);
         } else {
             archsByType.emplace(
                 std::piecewise_construct,
-                std::forward_as_tuple(type),
+                std::forward_as_tuple(component_type),
                 std::forward_as_tuple(std::initializer_list<Archetype*>{arch})
             );
         }
     }
 
-    void removeOldArchIfEmpty(Archetype* oldArch) noexcept {
-        if (oldArch->size() <= 0 && oldArch != emptyArch) {
+    constexpr auto removeOldArchIfEmpty(Archetype* oldArch) noexcept -> void {
+        if (oldArch->size() <= 0 && oldArch != emptyArch.get()) {
             for (const auto& pair: oldArch->pools) {
                 archsByType.at(pair.first).erase(oldArch);
             }
@@ -861,7 +1015,7 @@ private:
 private:
     Ent lastEnt = 1;
     std::vector<Ent> entTokens;
-    Archetype* emptyArch;
+    std::unique_ptr<Archetype> emptyArch;
     std::unordered_set<Archetype*> archs;
     std::unordered_map<Ent, Archetype*> entArch;
     std::unordered_map<Type, std::unordered_set<Archetype*>> archsByType;
@@ -879,8 +1033,8 @@ private:
     LateUpgrade() = default;
 
 private:
-    Ent newEnt(const Ent ent, const std::initializer_list<std::pair<const Type, std::any>>& newList) noexcept {
-        std::unique_lock<std::mutex> lock(mtx);
+    auto newEnt(const Ent& ent, const std::initializer_list<std::pair<const Type, std::any>>& newList) noexcept -> Ent {
+        const std::unique_lock<std::mutex> lock(mtx);
         addEnts.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(ent),
@@ -889,30 +1043,29 @@ private:
         return ent;
     }
 
-    void add(const Ent ent, const std::initializer_list<std::pair<const Type, std::any>>& newList) noexcept {
-        std::unique_lock<std::mutex> lock(mtx);
-        if (auto addEntsIt = addEnts.find(ent); addEntsIt != addEnts.end()) {
+    void add(const Registry& reg, const Ent& ent, const std::initializer_list<std::pair<const Type, std::any>>& newList) noexcept {
+        const std::unique_lock<std::mutex> lock(mtx);
+        auto addCompsIt = addComps.find(ent);
+        if (addCompsIt != addComps.end()) {
             for (const auto& pair: newList) {
-                if (!addEntsIt->second.contains(pair.first)) {
-                    addEntsIt->second.emplace(
+                if (!addCompsIt->second.contains(pair.first)) {
+                    addCompsIt->second.emplace(
                         std::piecewise_construct,
                         std::forward_as_tuple(pair.first),
                         std::forward_as_tuple(pair.second)
                     );
                 } else {
-                    printf("No Add Sur Ent: Le Composant %s existe deja\n", pair.second.type().name());
+                    std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (dans addComp)", pair.second.type().name());
                 }
             }
         } else {
-            auto addCompsIt = addComps.find(ent);
-            if (addCompsIt == addComps.end()) {
-                addComps.emplace(
-                    std::piecewise_construct,
-                    std::forward_as_tuple(ent),
-                    std::forward_as_tuple(newList)
-                );
-            } else {
-                for (const auto& pair: newList) {
+            addCompsIt = addComps.emplace(
+                std::piecewise_construct,
+                std::forward_as_tuple(ent),
+                std::forward_as_tuple()
+            ).first;
+            for (const auto& pair: newList) {
+                if (!reg.has(ent, {pair.first})) {
                     if (!addCompsIt->second.contains(pair.first)) {
                         addCompsIt->second.emplace(
                             std::piecewise_construct,
@@ -920,15 +1073,17 @@ private:
                             std::forward_as_tuple(pair.second)
                         );
                     } else {
-                        printf("No Add Sur Comp: Le Composant %s existe deja\n", pair.second.type().name());
+                        std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (en double sur l'ajout dans addComp)", pair.second.type().name());
                     }
+                } else {
+                    std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (sur l'entite)", pair.second.type().name());
                 }
             }
         }
     }
 
-    void remove(const Ent ent, const Type type) noexcept {
-        std::unique_lock<std::mutex> lock(mtx);
+    void remove(const Ent& ent, const Type& type) noexcept {
+        const std::unique_lock<std::mutex> lock(mtx);
         if (!delEnts.contains(ent)) {
             auto addEntsIt = addEnts.find(ent);
             if (addEntsIt == addEnts.end() || !addEntsIt->second.contains(type)) {
@@ -959,34 +1114,58 @@ private:
         }
     }
 
-    void destroyChildRec(Registry& reg, const Ent parentEnt) noexcept {
-        addEnts.erase(parentEnt);
-        addComps.erase(parentEnt);
-        delComps.erase(parentEnt);
-        delEnts.emplace(parentEnt);
-        if (addComps.contains(parentEnt)) {
-            addComps.erase(parentEnt);
-        }
-        if (auto childrenOpt = reg.getChildren(parentEnt)) {
-            for (const auto childEnt: childrenOpt.value().get()) {
-                destroyChildRec(reg, childEnt);
+    void appendChildren(const Ent& parentEnt, const std::vector<Ent>& childrenEnt) {
+        const std::unique_lock<std::mutex> lock(mtx);
+        if (auto addParentChildrenIt = addParentChildren.find(parentEnt); addParentChildrenIt != addParentChildren.end()) {
+            for (const auto childEnt: childrenEnt) {
+                addParentChildrenIt->second.emplace(childEnt);
             }
+        } else {
+            addParentChildren.emplace(
+                std::piecewise_construct,
+                std::forward_as_tuple(parentEnt),
+                std::forward_as_tuple(childrenEnt.begin(), childrenEnt.end())
+            );
         }
     }
 
-    void destroy(Registry& reg, const Ent ent) noexcept {
-        std::unique_lock<std::mutex> lock(mtx);
-        destroyChildRec(reg, ent);
+    void setActive(const Ent& ent) {
+        setActiveEnts.emplace(ent);
     }
 
-    void loadScene(void(*newScene)(World&)) noexcept {
+    void setInactive(const Ent& ent) {
+        setInactiveEnts.emplace(ent);
+    }
+
+    void addDontDestroyOnLoad(const Ent& ent) {
+        addDontDestroyOnLoadEnts.emplace(ent);
+    }
+
+    void destroyChildRec(Registry& reg, const Ent& parentEnt) noexcept {
+        if (reg.exist(parentEnt)) {
+            if (auto childrenOpt = reg.getChildren(parentEnt)) {
+                const std::unordered_set<Ent> copyChildrenSet = childrenOpt.value().get();
+                for (const auto childEnt: copyChildrenSet) {
+                    destroyChildRec(reg, childEnt);
+                }
+            }
+            reg.destroy(parentEnt);
+        }
+    }
+
+    void destroy(const Ent& ent) noexcept {
+        const std::unique_lock<std::mutex> lock(mtx);
+        delEnts.emplace(ent);
+    }
+
+    void loadScene(std::function<void(SceneSystem, World&)>&& newScene) noexcept {
         needClean = true;
-        newSceneFunc = newScene;
+        newSceneFunc = std::move(newScene);
     }
 
 private:
-    const std::vector<std::string> getTypes(const Ent ent) noexcept {
-        std::unique_lock<std::mutex> lock(mtx);
+    auto getTypes(const Ent& ent) noexcept -> const std::vector<std::string> {
+        const std::unique_lock<std::mutex> lock(mtx);
         std::vector<std::string> types;
         for (const auto& pairType: addEnts.at(ent)) {
             types.emplace_back(pairType.second.type().name());
@@ -998,11 +1177,43 @@ private:
     }
 
 private:
-    void upgrade(World& world, Registry& reg) noexcept {
-        for (const auto& pair: addComps) {
-            for (const auto& pairType: pair.second) {
-                reg.add(pair.first, pairType.second);
+    void setActiveRec(Registry& reg, const Ent& ent) {
+        if (reg.has(ent, {typeid(IsInactive).hash_code()})) {
+            reg.remove(ent, typeid(IsInactive).hash_code());
+            if (auto childrenOpt = reg.getChildren(ent)) {
+                for (auto childEnt: childrenOpt.value().get()) {
+                    setActiveRec(reg, childEnt);
+                }
             }
+        }
+    }
+
+    void setInactiveRec(Registry& reg, const Ent& ent) {
+        if (!reg.has(ent, {typeid(IsInactive).hash_code()})) {
+            reg.add(ent, std::make_any<IsInactive>());
+            if (auto childrenOpt = reg.getChildren(ent)) {
+                for (auto childEnt: childrenOpt.value().get()) {
+                    setInactiveRec(reg, childEnt);
+                }
+            }
+        }
+    }
+
+    void addDontDetroyOnLoadRec(Registry& reg, const Ent& ent) {
+        if (!reg.has(ent, {typeid(DontDestroyOnLoad).hash_code()})) {
+            reg.add(ent, std::make_any<DontDestroyOnLoad>());
+            if (auto childrenOpt = reg.getChildren(ent)) {
+                for (auto childEnt: childrenOpt.value().get()) {
+                    addDontDetroyOnLoadRec(reg, childEnt);
+                }
+            }
+        }
+    }
+
+private:
+    void upgrade(World& world, Registry& reg) noexcept {
+        for (const auto& pair: addEnts) {
+            reg.newEnt(pair.first, pair.second);
         }
 
         for (const auto& pair: delComps) {
@@ -1011,26 +1222,49 @@ private:
             }
         }
 
-        for (const auto& pair: addEnts) {
-            reg.newEnt(pair.first, pair.second);
+        for (const auto& pair: addComps) {
+            for (const auto& pairType: pair.second) {
+                reg.add(pair.first, pairType.second);
+            }
+        }
+
+        for (const auto& pair: addParentChildren) {
+            reg.appendChildren(pair.first, pair.second);
+        }
+
+        for (const auto ent: setInactiveEnts) {
+            setInactiveRec(reg, ent);
+        }
+
+        for (const auto ent: addDontDestroyOnLoadEnts) {
+            addDontDetroyOnLoadRec(reg, ent);
         }
 
         for (const Ent ent: delEnts) {
-            reg.destroy(ent);
+            destroyChildRec(reg, ent);
+        }
+
+        for (const auto ent: setActiveEnts) {
+            setActiveRec(reg, ent);
         }
 
         delEnts.clear();
         addEnts.clear();
         delComps.clear();
         addComps.clear();
+        setActiveEnts.clear();
+        setInactiveEnts.clear();
+        addDontDestroyOnLoadEnts.clear();
+        addParentChildren.clear();
 
         if (needClean) {
             needClean = false;
+            std::unordered_map<Ent, std::unordered_set<Ent>> dontDestroyesHierarchies;
             for (auto [dontDestroyEnt]: reg.view({typeid(DontDestroyOnLoad).hash_code()}, {})) {
                 auto* arch = reg.entArch.at(dontDestroyEnt);
                 std::unordered_map<Type, std::any> comps;
                 for (auto& pair: arch->pools) {
-                    comps.emplace(pair.first, pair.second->comps.at(dontDestroyEnt));
+                    comps.emplace(pair.first, pair.second.comps.at(dontDestroyEnt));
                 }
                 dontDestroyes.emplace(dontDestroyEnt, comps);
                 if (auto childrenIt = reg.parentChildrens.find(dontDestroyEnt); childrenIt != reg.parentChildrens.end()) {
@@ -1038,6 +1272,7 @@ private:
                 }
             }
             reg.clean();
+
             std::unordered_map<Ent, Ent> oldToNewEnts;
             for (const auto& pair: dontDestroyes) {
                 auto newEntId = reg.getEntToken();
@@ -1045,16 +1280,21 @@ private:
                 oldToNewEnts.emplace(pair.first, newEntId);
             }
             dontDestroyes.clear();
+
             for (const auto& pair: dontDestroyesHierarchies) {
                 auto newEntId = oldToNewEnts.at(pair.first);
                 std::unordered_set<Ent> newChildrens;
                 for (auto oldChildEnt: pair.second) {
-                    newChildrens.emplace(oldToNewEnts.at(oldChildEnt));
+                    if (auto oldToNewEntsIt = oldToNewEnts.find(oldChildEnt); oldToNewEntsIt != oldToNewEnts.end()) {
+                        newChildrens.emplace(oldToNewEntsIt->second);
+                    } else {
+                        std::println("Probleme sur la purge des scenes");
+                    }
                 }
                 reg.appendChildren(newEntId, newChildrens);
             }
-            dontDestroyesHierarchies.clear();
-            newSceneFunc(world);
+
+            newSceneFunc({}, world);
         }
     }
 
@@ -1065,9 +1305,16 @@ private:
     std::unordered_set<Ent> delEnts;
     std::unordered_map<Ent, std::unordered_set<Type>> delComps;
     std::unordered_map<Ent, std::unordered_map<Type, std::any>> dontDestroyes;
-    std::unordered_map<Ent, std::unordered_set<Ent>> dontDestroyesHierarchies;
+
+    std::unordered_map<Ent, std::unordered_set<Ent>> addParentChildren;
+
+    std::unordered_set<Ent> setActiveEnts;
+    std::unordered_set<Ent> setInactiveEnts;
+
+    std::unordered_set<Ent> addDontDestroyOnLoadEnts;
+
     bool needClean = false;
-    void(*newSceneFunc)(World&);
+    std::function<void(SceneSystem, World&)> newSceneFunc;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -1076,11 +1323,11 @@ class TypeMap final {
 friend class World;
 friend class ZerEngine;
 private:
-    constexpr void emplace(Type&& type, std::any&& any) noexcept {
+    constexpr void emplace(const Type&& type, const std::any&& any) noexcept {
         typeMap.emplace(std::move(type), std::move(any));
     }
 
-    [[nodiscard]] constexpr auto&& get(this auto&& self, const Type type) noexcept {
+    [[nodiscard]] constexpr auto get(this auto& self, const Type& type) noexcept -> auto& {
         return self.typeMap.at(type);
     }
 
@@ -1094,6 +1341,41 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////////
 
+class ThreadedFixedSet {
+friend class Sys;
+public:
+    ThreadedFixedSet(std::initializer_list<ThreadedFixedSet>&& newSubSets):
+        condition(nullptr),
+        tasks(),
+        subSets(std::move(newSubSets)) {
+    }
+
+    ThreadedFixedSet(std::function<bool(World&)>&& newCondition, std::initializer_list<ThreadedFixedSet>&& newSubSets):
+        condition(std::move(newCondition)),
+        tasks(),
+        subSets(std::move(newSubSets)) {
+    }
+
+    ThreadedFixedSet(std::initializer_list<std::function<void(ThreadedFixedSystem, World&)>>&& newTasks, std::initializer_list<ThreadedFixedSet>&& newSubSets = {}):
+        condition(nullptr),
+        tasks(std::move(newTasks)),
+        subSets(std::move(newSubSets)) {
+    }
+
+    ThreadedFixedSet(std::function<bool(World&)>&& newCondition, std::initializer_list<std::function<void(ThreadedFixedSystem, World&)>>&& newTasks, std::initializer_list<ThreadedFixedSet>&& newSubSets = {}):
+        condition(std::move(newCondition)),
+        tasks(std::move(newTasks)),
+        subSets(std::move(newSubSets)) {
+    }
+
+private:
+    std::function<bool(World&)> condition;
+    std::vector<std::function<void(ThreadedFixedSystem, World&)>> tasks;
+    std::vector<ThreadedFixedSet> subSets;
+};
+
+///////////////////////////////////////////////////////////////////////////////////
+
 class World;
 
 class ThreadPool final {
@@ -1101,12 +1383,11 @@ friend class Sys;
 private:
     ThreadPool(World& newWorld, std::size_t newNbThreads) noexcept:
         world(newWorld),
-        nbTasksDone(0),
-        nbTasks(0),
-        nbThreads(newNbThreads),
-        isStop(false) {
+        nbThreads(newNbThreads) {
         for (std::size_t i = 0; i < nbThreads; i++) {
-            threads.emplace_back(std::bind(&ThreadPool::task, this));
+            threads.emplace_back([this] {
+                task();
+            });
         }
     }
 
@@ -1118,12 +1399,16 @@ private:
         }
     }
 
-    void addTasks(const std::vector<void(*)(ThreadedSystem, World&)>& newTasks) noexcept {
+    void addTasks(const std::vector<std::function<void(ThreadedSystem, World&)>>& newTasks) noexcept {
         tasks.emplace_back(newTasks);
     }
 
-    void addFixedTasks(const std::vector<void(*)(ThreadedFixedSystem, World&)>& newTasks) noexcept {
+    void addFixedTasks(const std::vector<std::function<void(ThreadedFixedSystem, World&)>>& newTasks) noexcept {
         fixedTasks.emplace_back(newTasks);
+    }
+
+    void addUnscaledFixedTasks(const std::vector<std::function<void(ThreadedUnscaledFixedSystem, World&)>>& newTasks) noexcept {
+        unscaledFixedTasks.emplace_back(newTasks);
     }
 
     void run() noexcept {
@@ -1144,11 +1429,20 @@ private:
         }
     }
 
+    void unscaledFixedRun() noexcept {
+        if (!unscaledFixedTasks.empty()) {
+            nbTasksDone = unscaledFixedTasks[0].size();
+            cvTask.notify_all();
+        } else {
+            nbTasksDone = 0;
+        }
+    }
+
     void wait() noexcept {
         std::unique_lock<std::mutex> lock(mtx);
         cvFinished.wait(lock, [&]() {
             if (!tasks.empty() && nbTasksDone != 0) {
-               cvTask.notify_all(); 
+               cvTask.notify_all();
             }
             return (tasks.empty() && (nbTasks == 0));
         });
@@ -1157,16 +1451,26 @@ private:
     void fixedWait() noexcept {
         std::unique_lock<std::mutex> lock(mtx);
         cvFinished.wait(lock, [&]() {
-            if (!tasks.empty() && nbTasksDone != 0) {
-               cvTask.notify_all(); 
+            if (!fixedTasks.empty() && nbTasksDone != 0) {
+               cvTask.notify_all();
             }
             return (fixedTasks.empty() && (nbTasks == 0));
         });
     }
 
+    void unscaledFixedWait() noexcept {
+        std::unique_lock<std::mutex> lock(mtx);
+        cvFinished.wait(lock, [&]() {
+            if (!unscaledFixedTasks.empty() && nbTasksDone != 0) {
+               cvTask.notify_all();
+            }
+            return (unscaledFixedTasks.empty() && (nbTasks == 0));
+        });
+    }
+
 private:
     void task() noexcept {
-        srand(time(NULL));
+        std::srand(std::time(nullptr));
         std::unique_lock<std::mutex> lock(mtx);
         while (true) {
             cvTask.wait(lock, [&]() {
@@ -1199,7 +1503,7 @@ private:
                 if (tasks.empty() && nbTasks == 0) {
                     cvFinished.notify_one();
                 }
-            } else {
+            } else if (!fixedTasks.empty()) {
                 nbTasks++;
                 auto newTask = fixedTasks[0].back();
                 fixedTasks[0].pop_back();
@@ -1222,28 +1526,52 @@ private:
                 if (fixedTasks.empty() && nbTasks == 0) {
                     cvFinished.notify_one();
                 }
+            } else if (!unscaledFixedTasks.empty()) {
+                nbTasks++;
+                auto newTask = unscaledFixedTasks[0].back();
+                unscaledFixedTasks[0].pop_back();
+                nbTasksDone--;
+                lock.unlock();
+
+                newTask({}, world);
+
+                lock.lock();
+                nbTasks--;
+
+                if (nbTasksDone == 0 && nbTasks == 0) {
+                    unscaledFixedTasks.erase(unscaledFixedTasks.begin());
+                    if (!unscaledFixedTasks.empty()) {
+                        nbTasksDone = unscaledFixedTasks[0].size();
+                        cvFinished.notify_one();
+                    }
+                }
+
+                if (unscaledFixedTasks.empty() && nbTasks == 0) {
+                    cvFinished.notify_one();
+                }
             }
         }
     }
 
     void stop() noexcept {
-        std::unique_lock<std::mutex> lock(mtx);
+        const std::unique_lock<std::mutex> lock(mtx);
         isStop = true;
         cvTask.notify_all();
     }
 
 private:
     World& world;
-    std::vector<std::vector<void(*)(ThreadedSystem, World&)>> tasks;
-    std::vector<std::vector<void(*)(ThreadedFixedSystem, World&)>> fixedTasks;
+    std::vector<std::vector<std::function<void(ThreadedSystem, World&)>>> tasks;
+    std::vector<std::vector<std::function<void(ThreadedFixedSystem, World&)>>> fixedTasks;
+    std::vector<std::vector<std::function<void(ThreadedUnscaledFixedSystem, World&)>>> unscaledFixedTasks;
     std::mutex mtx;
-    std::size_t nbTasksDone;
+    std::size_t nbTasksDone {0};
     std::condition_variable cvTask;
     std::condition_variable cvFinished;
     std::vector<std::thread> threads;
-    std::size_t nbTasks;
+    std::size_t nbTasks {0};
     std::size_t nbThreads;
-    bool isStop;
+    bool isStop {false};
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -1253,10 +1581,9 @@ friend class World;
 friend class ZerEngine;
 private:
     Sys(World& world) noexcept:
-        threadpool(world, std::thread::hardware_concurrency() - 1),
-        isUseMultithreading(true)
+        threadpool(world, std::thread::hardware_concurrency() - 1)
     {
-        srand(time(NULL));
+        std::srand(std::time(nullptr));
     }
 
 private:
@@ -1264,43 +1591,49 @@ private:
         isUseMultithreading = newVal;
     }
 
-    constexpr void addStartSys(void(*const func)(StartSystem, World&)) noexcept {
-        startSystems.emplace_back(func);
+    constexpr void addStartSys(std::function<void(StartSystem, World&)>&& func) noexcept {
+        startSystems.emplace_back(std::move(func));
     }
 
-    template <typename... Funcs>
-    constexpr void addMainCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        mainSystems.emplace_back(cond, std::initializer_list<void(*)(MainSystem, World&)>{std::forward<Funcs>(funcs)...});
+    constexpr void addMainCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainSystem, World&)>>&& funcs) noexcept {
+        mainSystems.emplace_back(std::move(cond), std::move(funcs));
     }
 
-    template <typename... Funcs>
-    constexpr void addMainFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        mainFixedSystems.emplace_back(cond, std::initializer_list<void(*)(MainFixedSystem, World&)>{std::forward<Funcs>(funcs)...});
+    constexpr void addMainFixedCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainFixedSystem, World&)>>&& funcs) noexcept {
+        mainFixedSystems.emplace_back(std::move(cond), std::move(funcs));
     }
 
-    template <typename... Funcs>
-    constexpr void addThreadedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        threadedSystems.emplace_back(cond, std::initializer_list<void(*)(ThreadedSystem, World&)>{std::forward<Funcs>(funcs)...});
+    constexpr void addMainUnscaledFixedCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainUnscaledFixedSystem, World&)>>&& funcs) noexcept {
+        mainUnscaledFixedSystems.emplace_back(std::move(cond), std::move(funcs));
     }
 
-    template <typename... Funcs>
-    constexpr void addThreadedFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        threadedFixedSystems.emplace_back(cond, std::initializer_list<void(*)(ThreadedFixedSystem, World&)>{std::forward<Funcs>(funcs)...});
+    constexpr void addThreadedCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(ThreadedSystem, World&)>>&& funcs) noexcept {
+        threadedSystems.emplace_back(std::move(cond), std::move(funcs));
     }
 
-    template <typename... Funcs>
-    constexpr void addLateCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        lateSystems.emplace_back(cond, std::initializer_list<void(*)(LateSystem, World&)>{std::forward<Funcs>(funcs)...});
+    constexpr void addThreadedFixedCondSys(const ThreadedFixedSet& newSet) noexcept {
+        threadedFixedSystems.emplace_back(newSet);
     }
 
-    template <typename... Funcs>
-    constexpr void addLateFixedCondSys(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        lateFixedSystems.emplace_back(cond, std::initializer_list<void(*)(LateFixedSystem, World&)>{std::forward<Funcs>(funcs)...});
+    constexpr void addThreadedUnscaledFixedCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(ThreadedUnscaledFixedSystem, World&)>>&& funcs) noexcept {
+        threadedUnscaledFixedSystems.emplace_back(std::move(cond), std::move(funcs));
+    }
+
+    constexpr void addLateCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateSystem, World&)>>&& funcs) noexcept {
+        lateSystems.emplace_back(std::move(cond), std::move(funcs));
+    }
+
+    constexpr void addLateFixedCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateFixedSystem, World&)>>&& funcs) noexcept {
+        lateFixedSystems.emplace_back(std::move(cond), funcs);
+    }
+
+    constexpr void addLateUnscaledFixedCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateUnscaledFixedSystem, World&)>>&& funcs) noexcept {
+        lateUnscaledFixedSystems.emplace_back(std::move(cond), std::move(funcs));
     }
 
     void start(World& world) const noexcept {
         for (const auto& func: startSystems) {
-            func({}, world);
+            func(startSystem, world);
         }
     }
 
@@ -1308,7 +1641,7 @@ private:
         for (const auto& mainFunc: mainSystems) {
             if (mainFunc.first == nullptr || mainFunc.first(world)) {
                 for (const auto& mainRow: mainFunc.second) {
-                    mainRow({}, world);
+                    mainRow(mainSystem, world);
                 }
             }
         }
@@ -1317,7 +1650,7 @@ private:
             if (funcs.first == nullptr || funcs.first(world)) {
                 if (!isUseMultithreading) {
                     for (auto& func: funcs.second) {
-                        func({}, world);
+                        func(threadedSystem, world);
                     }
                 } else {
                     threadpool.addTasks(funcs.second);
@@ -1325,17 +1658,35 @@ private:
             }
         }
 
-        threadpool.run();
-
-        threadpool.wait();
+        if (isUseMultithreading) {
+            threadpool.run();
+            threadpool.wait();
+        }
     }
 
     void runLate(World& world) noexcept {
         for (const auto& lateFunc: lateSystems) {
             if (lateFunc.first == nullptr || lateFunc.first(world)) {
                 for (const auto& lateRow: lateFunc.second) {
-                    lateRow({}, world);
+                    lateRow(lateSystem, world);
                 }
+            }
+        }
+    }
+
+    void runThreadedFixedSetRec(World& world, const ThreadedFixedSet& set, std::vector<std::function<void(ThreadedFixedSystem, World&)>>& setTasks) noexcept {
+        if (set.condition == nullptr || set.condition(world)) {
+            if (!set.tasks.empty()) {
+                if (!isUseMultithreading) {
+                    for (auto& func: set.tasks) {
+                        func(threadedFixedSystem, world);
+                    }
+                } else {
+                    setTasks.insert(setTasks.end(), set.tasks.begin(), set.tasks.end());
+                }
+            }
+            for (const auto& subSet: set.subSets) {
+                runThreadedFixedSetRec(world, subSet, setTasks);
             }
         }
     }
@@ -1344,26 +1695,23 @@ private:
         for (const auto& mainFunc: mainFixedSystems) {
             if (mainFunc.first == nullptr || mainFunc.first(world)) {
                 for (const auto& mainRow: mainFunc.second) {
-                    mainRow({}, world);
+                    mainRow(mainFixedSystem, world);
                 }
             }
         }
 
-        for (const auto& funcs: threadedFixedSystems) {
-            if (funcs.first == nullptr || funcs.first(world)) {
-                if (!isUseMultithreading) {
-                    for (auto& func: funcs.second) {
-                        func({}, world);
-                    }
-                } else {
-                    threadpool.addFixedTasks(funcs.second);
-                }
+        for (const auto& subSet: threadedFixedSystems) {
+            std::vector<std::function<void(ThreadedFixedSystem, World&)>> setTasks;
+            runThreadedFixedSetRec(world, subSet, setTasks);
+            if (isUseMultithreading && !setTasks.empty()) {
+                threadpool.addFixedTasks(setTasks);
             }
         }
 
-        threadpool.fixedRun();
-
-        threadpool.fixedWait();
+        if (isUseMultithreading) {
+            threadpool.fixedRun();
+            threadpool.fixedWait();
+        }
 
         for (const auto& lateFunc: lateFixedSystems) {
             if (lateFunc.first == nullptr || lateFunc.first(world)) {
@@ -1374,16 +1722,54 @@ private:
         }
     }
 
+    void runUnscaledFixed(World& world) noexcept {
+        for (const auto& mainFunc: mainUnscaledFixedSystems) {
+            if (mainFunc.first == nullptr || mainFunc.first(world)) {
+                for (const auto& mainRow: mainFunc.second) {
+                    mainRow(mainUnscaledFixedSystem, world);
+                }
+            }
+        }
+
+        for (const auto& funcs: threadedUnscaledFixedSystems) {
+            if (funcs.first == nullptr || funcs.first(world)) {
+                if (!isUseMultithreading) {
+                    for (auto& func: funcs.second) {
+                        func(threadedUnscaledFixedSystem, world);
+                    }
+                } else {
+                    threadpool.addUnscaledFixedTasks(funcs.second);
+                }
+            }
+        }
+
+        if (isUseMultithreading) {
+            threadpool.unscaledFixedRun();
+            threadpool.unscaledFixedWait();
+        }
+
+        for (const auto& lateFunc: lateUnscaledFixedSystems) {
+            if (lateFunc.first == nullptr || lateFunc.first(world)) {
+                for (const auto& lateRow: lateFunc.second) {
+                    lateRow(lateUnscaledFixedSystem, world);
+                }
+            }
+        }
+    }
+
 private:
-    std::vector<void(*)(StartSystem, World&)> startSystems;
-    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(MainSystem, World&)>>> mainSystems;
-    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(MainFixedSystem, World&)>>> mainFixedSystems;
-    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(ThreadedSystem, World&)>>> threadedSystems;
-    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(ThreadedFixedSystem, World&)>>> threadedFixedSystems;
-    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(LateSystem, World&)>>> lateSystems;
-    std::vector<std::pair<bool(*)(World&), std::vector<void(*)(LateFixedSystem, World&)>>> lateFixedSystems;
+    std::vector<std::function<void(StartSystem, World&)>> startSystems;
+    std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(MainSystem, World&)>>>> mainSystems;
+    std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(MainFixedSystem, World&)>>>> mainFixedSystems;
+    std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(MainUnscaledFixedSystem, World&)>>>> mainUnscaledFixedSystems;
+    std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(ThreadedSystem, World&)>>>> threadedSystems;
+    std::vector<ThreadedFixedSet> threadedFixedSystems;
+    std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(ThreadedUnscaledFixedSystem, World&)>>>> threadedUnscaledFixedSystems;
+    std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(LateSystem, World&)>>>> lateSystems;
+    std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(LateFixedSystem, World&)>>>> lateFixedSystems;
+    std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(LateUnscaledFixedSystem, World&)>>>> lateUnscaledFixedSystems;
     ThreadPool threadpool;
-    bool isUseMultithreading;
+    bool isUseMultithreading {true};
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -1393,10 +1779,11 @@ friend class ZerEngine;
 public:
     Time(float newFixedTimeStep = 0.02f) noexcept:
         t2(std::chrono::high_resolution_clock::now()),
+        totalTime(std::chrono::high_resolution_clock::now()),
         fixedTimeStep(newFixedTimeStep) {
     }
 
-private:    
+private:
     constexpr void setFixedTimeStep(float newFixedTimeStep) noexcept {
         fixedTimeStep = newFixedTimeStep;
     }
@@ -1419,31 +1806,31 @@ private:
     }
 
 public:
-    [[nodiscard]] constexpr float delta() const noexcept {
+    [[nodiscard]] constexpr auto delta() const noexcept -> float {
         return dt * timeScale;
     }
 
-    [[nodiscard]] constexpr float unscaledDelta() const noexcept {
+    [[nodiscard]] constexpr auto unscaledDelta() const noexcept -> float {
         return dt;
     }
 
-    [[nodiscard]] constexpr float unscaledFixedDelta() const noexcept {
+    [[nodiscard]] constexpr auto unscaledFixedDelta() const noexcept -> float {
         return fixedTimeStep;
     }
 
-    [[nodiscard]] constexpr float fixedDelta() const noexcept {
+    [[nodiscard]] constexpr auto fixedDelta() const noexcept -> float {
         return fixedTimeStep * timeScale;
     }
 
-    [[nodiscard]] constexpr bool isTimeStep() const noexcept {
+    [[nodiscard]] constexpr auto isTimeStep() const noexcept -> bool {
         return isTimeStepFrame;
     }
 
-    [[nodiscard]] constexpr unsigned int getNbFixedSteps() const noexcept {
+    [[nodiscard]] constexpr auto getNbFixedSteps() const noexcept -> unsigned int {
         return nbFixedSteps;
     }
 
-    constexpr float getTimeScale() const noexcept {
+    [[nodiscard]] constexpr auto getTimeScale() const noexcept -> float {
         return newTimeScale;
     }
 
@@ -1457,7 +1844,7 @@ private:
             nbFrames++;
             timer += dt;
             if (timer >= FRAME_COOLDOWN) {
-                printf("FPS: %zu\n", nbFrames);
+                std::println("FPS: {}", nbFrames);
                 timer -= FRAME_COOLDOWN;
                 nbFrames = 0;
             }
@@ -1471,6 +1858,7 @@ private:
 private:
     double dt = 0;
     std::chrono::high_resolution_clock::time_point t2;
+    std::chrono::high_resolution_clock::time_point totalTime;
     bool isTimeStepFrame = false;
     float fixedTimeStep;
     float timeStepBuffer = 0;
@@ -1493,25 +1881,28 @@ private:
     }
 
 public:
-    bool exist(const Ent ent) const noexcept {
+    [[nodiscard("La valeur de retour d'une commande Exist doit toujours etre evalue")]] auto exist(const Ent& ent) const noexcept -> bool {
         return reg.exist(ent);
     }
 
-    template <typename T, typename... Ts>
-    bool has(const Ent ent) const noexcept {
+    template <typename T, typename... Ts> requires ((!std::is_reference_v<T> || (!std::is_reference_v<Ts> || ...)) && (!std::is_const_v<T> || (!std::is_const_v<Ts> || ...)))
+    [[nodiscard("La valeur de retour d'une commande Has doit toujours etre evalue")]] auto hasThisFrame(const Ent& ent) const noexcept -> bool {
         if (!reg.exist(ent)) {
             return false;
-        } else if (reg.has(ent, {typeid(T).hash_code()})) {
+        }
+        if (reg.has(ent, {typeid(T).hash_code()})) {
             if constexpr (sizeof...(Ts) > 0) {
                 return has<Ts...>(ent);
             }
             return true;
-        } else if (auto addEntsIt = lateUpgrade.addEnts.find(ent); addEntsIt != lateUpgrade.addEnts.end() && addEntsIt->second.contains(typeid(T).hash_code())) {
+        }
+        if (auto addEntsIt = lateUpgrade.addEnts.find(ent); addEntsIt != lateUpgrade.addEnts.end() && addEntsIt->second.contains(typeid(T).hash_code())) {
             if constexpr (sizeof...(Ts) > 0) {
                 return has<Ts...>(ent);
             }
             return true;
-        } else if (auto addCompsIt = lateUpgrade.addComps.find(ent); addCompsIt != lateUpgrade.addComps.end() && addCompsIt->second.contains(typeid(T).hash_code())) {
+        }
+        if (auto addCompsIt = lateUpgrade.addComps.find(ent); addCompsIt != lateUpgrade.addComps.end() && addCompsIt->second.contains(typeid(T).hash_code())) {
             if constexpr (sizeof...(Ts) > 0) {
                 return has<Ts...>(ent);
             }
@@ -1520,15 +1911,50 @@ public:
         return false;
     }
 
-    const std::vector<std::string> getTypes(const Ent ent) noexcept {
+    template <typename T, typename... Ts> requires ((!std::is_reference_v<T> || (!std::is_reference_v<Ts> || ...)) && (!std::is_const_v<T> || (!std::is_const_v<Ts> || ...)))
+    [[nodiscard("La valeur de retour d'une commande Has doit toujours etre evalue")]] auto has(const Ent& ent) const noexcept -> bool {
+        // if (!reg.exist(ent)) {
+        //     return false;
+        // } else if (reg.has(ent, {typeid(T).hash_code()})) {
+        //     if constexpr (sizeof...(Ts) > 0) {
+        //         return has<Ts...>(ent);
+        //     }
+        //     return true;
+        // }
+        // return false;
+        return hasThisFrame<T, Ts...>(ent);
+    }
+
+public:
+    [[nodiscard("La valeur de retour d'une commande GetTypes doit toujours etre recupere")]] auto getTypes(const Ent& ent) noexcept -> const std::vector<std::string> {
         auto types = reg.getTypes(ent);
-        types.append_range(lateUpgrade.getTypes(ent));
+        for (const auto& type: lateUpgrade.getTypes(ent)) {
+            types.emplace_back(type);
+        }
         return types;
     }
 
 private:
     template <typename T>
-    [[nodiscard]] std::optional<std::reference_wrapper<T>> internalGet(const Ent ent) noexcept {
+    [[nodiscard]] auto internalGet(const Ent& ent) noexcept -> std::optional<std::reference_wrapper<T>> {
+        if (reg.has(ent, {typeid(T).hash_code()})) {
+            auto& any = reg.get(ent, typeid(T).hash_code());
+            return std::any_cast<T&>(any);
+        }
+        return std::nullopt;
+    }
+
+    template <typename T>
+    [[nodiscard]] auto internalGet(const Ent& ent) const noexcept -> std::optional<const std::reference_wrapper<T>> {
+        if (reg.has(ent, {typeid(T).hash_code()})) {
+            auto& any = reg.get(ent, typeid(T).hash_code());
+            return std::any_cast<const T&>(any);
+        }
+        return std::nullopt;
+    }
+
+    template <typename T>
+    [[nodiscard]] auto internalGetThisFrame(const Ent& ent) noexcept -> std::optional<std::reference_wrapper<T>> {
         if (auto addEntsIt = lateUpgrade.addEnts.find(ent); addEntsIt != lateUpgrade.addEnts.end()) {
             if (auto addEntsTypeIt = addEntsIt->second.find(typeid(T).hash_code()); addEntsTypeIt != addEntsIt->second.end()) {
                 return std::any_cast<T&>(addEntsTypeIt->second);
@@ -1547,7 +1973,7 @@ private:
     }
 
     template <typename T>
-    [[nodiscard]] std::optional<const std::reference_wrapper<T>> internalGet(const Ent ent) const noexcept {
+    [[nodiscard]] auto internalGetThisFrame(const Ent& ent) const noexcept -> std::optional<const std::reference_wrapper<T>> {
         if (auto addEntsIt = lateUpgrade.addEnts.find(ent); addEntsIt != lateUpgrade.addEnts.end()) {
             if (auto addEntsTypeIt = addEntsIt->second.find(typeid(T).hash_code()); addEntsTypeIt != addEntsIt->second.end()) {
                 return std::any_cast<const T&>(addEntsTypeIt->second);
@@ -1566,149 +1992,189 @@ private:
     }
 
 public:
-    template <typename T, typename... Ts>
-    [[nodiscard]] std::optional<std::tuple<T&, Ts&...>> get(const Ent ent) noexcept {
-        if (auto opt = internalGet<T>(ent)) {
+    template <typename T, typename... Ts> requires (IsNotEmptyConcept<T> && IsFinalConcept<T> && IsNotSameConcept<T, Ts...> && !std::is_reference_v<T>)
+    [[nodiscard("La valeur de retour d'une commande Get doit toujours etre recupere")]] auto getThisFrame(const Ent& ent) noexcept -> std::optional<std::tuple<T&, Ts&...>> {
+        if (auto opt = internalGetThisFrame<T>(ent)) {
             if constexpr (sizeof...(Ts) > 0) {
-                if (auto othOpt = get<Ts...>(ent)) {
-                    return std::tuple_cat(std::forward_as_tuple(opt.value()), othOpt.value());
-                } else {
-                    return std::nullopt;
+                if (auto othOpt = getThisFrame<Ts...>(ent)) {
+                    return std::tuple_cat(std::forward_as_tuple(opt.value().get()), othOpt.value());
                 }
+                return std::nullopt;
             } else {
-                return std::forward_as_tuple(opt.value());
+                return std::forward_as_tuple(opt.value().get());
             }
         }
         return std::nullopt;
     }
 
-    [[nodiscard]] bool hasParent(const Ent childEnt) const noexcept {
+    template <typename T, typename... Ts> requires (IsNotEmptyConcept<T> && IsFinalConcept<T> && IsNotSameConcept<T, Ts...> && !std::is_reference_v<T>)
+    [[nodiscard("La valeur de retour d'une commande Get doit toujours etre recupere")]] auto get(const Ent& ent) noexcept -> std::optional<std::tuple<T&, Ts&...>> {
+        // if (auto opt = internalGet<T>(ent)) {
+        //     if constexpr (sizeof...(Ts) > 0) {
+        //         if (auto othOpt = get<Ts...>(ent)) {
+        //             return std::tuple_cat(std::forward_as_tuple(opt.value()), othOpt.value());
+        //         } else {
+        //             return std::nullopt;
+        //         }
+        //     } else {
+        //         return std::forward_as_tuple(opt.value());
+        //     }
+        // }
+        // return std::nullopt;
+        return getThisFrame<T, Ts...>(ent);
+    }
+
+    [[nodiscard("La valeur de retour d'une commande HasParent doit toujours etre evaluer")]] auto hasParent(const Ent& childEnt) const noexcept -> bool {
         return reg.hasParent(childEnt);
     }
 
-    [[nodiscard]] std::optional<Ent> getParent(const Ent childEnt) const noexcept {
+    [[nodiscard("La valeur de retour d'une commande GetParent doit toujours etre recupere")]] auto getParent(const Ent& childEnt) const noexcept -> std::optional<Ent> {
         return reg.getParent(childEnt);
     }
 
-    [[nodiscard]] bool hasChildren(const Ent parentEnt) const noexcept {
+    [[nodiscard("La valeur de retour d'une commande HasChildren doit toujours etre evaluer")]] auto hasChildren(const Ent& parentEnt) const noexcept -> bool {
         return reg.hasChildren(parentEnt);
     }
 
-    [[nodiscard]] std::optional<std::reference_wrapper<const std::unordered_set<Ent>>> getChildren(const Ent parentEnt) const noexcept {
+    [[nodiscard("La valeur de retour d'une commande GetChildren doit toujours etre recupere")]] auto getChildren(const Ent& parentEnt) const noexcept -> std::optional<std::reference_wrapper<const std::unordered_set<Ent>>> {
         return reg.getChildren(parentEnt);
     }
 
-    void appendChildren(const Ent parentEnt, const std::vector<Ent>& childrenEnt) noexcept {
-        if (has<DontDestroyOnLoad>(parentEnt)) {
-            for (auto childEnt: childrenEnt) {
-                addDontDestroyOnLoad(childEnt);
-            }
-        }
-        if (has<IsInactive>(parentEnt)) {
-            for (auto childEnt: childrenEnt) {
-                setInactive(childEnt);
-            }
-        }
-        reg.appendChildren(parentEnt, childrenEnt);
+    constexpr auto appendChildren(const Ent& parentEnt, const std::vector<Ent>& childrenEnt) noexcept -> Ent {
+        lateUpgrade.appendChildren(parentEnt, childrenEnt);
+        return parentEnt;
     }
 
-    template <typename... Ts> requires (sizeof...(Ts) > 0)
-    [[nodiscard]] decltype(auto) resource(this auto&& self) noexcept {
-        return std::forward_as_tuple(std::any_cast<Ts&>(std::move(self).res.get(typeid(Ts).hash_code()))...);
+    template <typename... Ts> requires ((sizeof...(Ts) > 0) && (!std::is_reference_v<Ts> || ...))
+    [[nodiscard("La valeur de retour d'une commande Resource doit toujours etre recupere")]] auto resource(this auto& self) noexcept -> std::tuple<Ts&...> {
+        return std::forward_as_tuple(std::any_cast<Ts&>(self.res.get(typeid(Ts).hash_code()))...);
     }
 
-    [[nodiscard]] const std::unordered_set<Ent>& getDestroyedEnts() const noexcept {
+    [[nodiscard]] auto getDestroyedEnts() const noexcept -> const std::unordered_set<Ent>& {
         return lateUpgrade.delEnts;
     }
 
-    [[nodiscard]] const std::unordered_map<Ent, std::unordered_map<Type, std::any>>& getAddedEnts() const noexcept {
+    [[nodiscard]] auto getAddedEnts() const noexcept -> const std::unordered_map<Ent, std::unordered_map<Type, std::any>>& {
         return lateUpgrade.addEnts;
     }
 
-    [[nodiscard]] const std::unordered_map<Ent, std::unordered_map<Type, std::any>>& getAddedComps() const noexcept {
+    [[nodiscard]] auto getAddedComps() const noexcept -> const std::unordered_map<Ent, std::unordered_map<Type, std::any>>& {
         return lateUpgrade.addComps;
     }
 
-    [[nodiscard]] const std::unordered_map<Ent, std::unordered_set<Type>>& getDestroyedComps() const noexcept {
+    [[nodiscard]] auto getDestroyedComps() const noexcept -> const std::unordered_map<Ent, std::unordered_set<Type>>& {
         return lateUpgrade.delComps;
     }
 
     template <typename... Comps, typename... Filters, typename... Excludes>
-    [[nodiscard]] const View<Comps...> view(const With<Filters...>& filters = {}, const Without<Excludes...>& excludes = {}) noexcept {
-        return reg.view<Comps...>(
-            {typeid(Comps).hash_code()..., typeid(Filters).hash_code()...},
-            {typeid(IsInactive).hash_code(), typeid(Excludes).hash_code()...}
-        );
+    requires (
+        (IsNotEmptyConcept<Comps> && ...) &&
+        IsNotSameConcept<Comps..., Filters..., Excludes...> &&
+        !(std::is_reference_v<Comps> || ...) &&
+        !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
+        !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
+    )
+    [[nodiscard]] auto view(With<Filters...> = {}, Without<Excludes...> = {}) noexcept -> const View<Comps...> {
+        return reg.view<Comps...>({typeid(Comps).hash_code()..., typeid(Filters).hash_code()...}, {typeid(IsInactive).hash_code(), typeid(Excludes).hash_code()...});
     }
 
     template <typename... Comps, typename... Filters, typename... Excludes>
-    [[nodiscard]] const View<Comps...> view(const Without<Excludes...>& excludes, const With<Filters...>& filters = {}) noexcept {
-        return reg.view<Comps...>(
-            {typeid(Comps).hash_code()..., typeid(Filters).hash_code()...},
-            {typeid(IsInactive).hash_code(), typeid(Excludes).hash_code()...}
-        );
+    requires (
+        (IsNotEmptyConcept<Comps> && ...) &&
+        IsNotSameConcept<Comps..., Filters..., Excludes...> &&
+        !(std::is_reference_v<Comps> || ...) &&
+        !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
+        !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
+    )
+    [[nodiscard]] auto view(Without<Excludes...>, With<Filters...> = {}) noexcept -> const View<Comps...> {
+        return reg.view<Comps...>({typeid(Comps).hash_code()..., typeid(Filters).hash_code()...}, {typeid(IsInactive).hash_code(), typeid(Excludes).hash_code()...});
     }
 
     template <typename... Comps, typename... Filters, typename... Excludes>
-    [[nodiscard]] const View<Comps...> view(const With<Filters...>& filters, const Without<Excludes...>& excludes, const WithInactive&) noexcept {
-        return reg.view<Comps...>(
-            {typeid(Comps).hash_code()..., typeid(Filters).hash_code()...},
-            {typeid(Excludes).hash_code()...}
-        );
+    requires (
+        (IsNotEmptyConcept<Comps> && ...) &&
+        IsNotSameConcept<Comps..., Filters..., Excludes...> &&
+        !(std::is_reference_v<Comps> || ...) &&
+        !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
+        !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
+    )
+    [[nodiscard]] auto view(With<Filters...>, Without<Excludes...>, WithInactive) noexcept -> const View<Comps...> {
+        return reg.view<Comps...>({typeid(Comps).hash_code()..., typeid(Filters).hash_code()...}, {typeid(Excludes).hash_code()...});
     }
 
     template <typename... Comps, typename... Filters, typename... Excludes>
-    [[nodiscard]] const View<Comps...> view(const Without<Excludes...>& excludes, const With<Filters...>& filters, const WithInactive&) noexcept {
-        return reg.view<Comps...>(
-            {typeid(Comps).hash_code()..., typeid(Filters).hash_code()...},
-            {typeid(Excludes).hash_code()...}
-        );
+    requires (
+        (IsNotEmptyConcept<Comps> && ...) &&
+        IsNotSameConcept<Comps..., Filters..., Excludes...> &&
+        !(std::is_reference_v<Comps> || ...) &&
+        !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
+        !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
+    )
+    [[nodiscard]] auto view(Without<Excludes...>, With<Filters...>, WithInactive) noexcept -> const View<Comps...> {
+        return reg.view<Comps...>({typeid(Comps).hash_code()..., typeid(Filters).hash_code()...}, {typeid(Excludes).hash_code()...});
     }
 
     template <typename... Comps, typename... Filters, typename... Excludes>
-    [[nodiscard]] const View<Comps...> view(const With<Filters...>& filters, const WithInactive&, const Without<Excludes...>& excludes = {}) noexcept {
-        return reg.view<Comps...>(
-            {typeid(Comps).hash_code()..., typeid(Filters).hash_code()...},
-            {typeid(Excludes).hash_code()...}
-        );
+    requires (
+        (IsNotEmptyConcept<Comps> && ...) &&
+        IsNotSameConcept<Comps..., Filters..., Excludes...> &&
+        !(std::is_reference_v<Comps> || ...) &&
+        !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
+        !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
+    )
+    [[nodiscard]] auto view(With<Filters...>, WithInactive, Without<Excludes...> = {}) noexcept -> const View<Comps...> {
+        return reg.view<Comps...>({typeid(Comps).hash_code()..., typeid(Filters).hash_code()...}, {typeid(Excludes).hash_code()...});
     }
 
     template <typename... Comps, typename... Filters, typename... Excludes>
-    [[nodiscard]] const View<Comps...> view(const Without<Excludes...>& excludes, const WithInactive&, const With<Filters...>& filters = {}) noexcept {
-        return reg.view<Comps...>(
-            {typeid(Comps).hash_code()..., typeid(Filters).hash_code()...},
-            {typeid(Excludes).hash_code()...}
-        );
+    requires (
+        (IsNotEmptyConcept<Comps> && ...) &&
+        IsNotSameConcept<Comps..., Filters..., Excludes...> &&
+        !(std::is_reference_v<Comps> || ...) &&
+        !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
+        !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
+    )
+    [[nodiscard]] auto view(Without<Excludes...>, WithInactive, With<Filters...> = {}) noexcept -> const View<Comps...> {
+        return reg.view<Comps...>({typeid(Comps).hash_code()..., typeid(Filters).hash_code()...}, {typeid(Excludes).hash_code()...});
     }
 
     template <typename... Comps, typename... Filters, typename... Excludes>
-    [[nodiscard]] const View<Comps...> view(const WithInactive&, const With<Filters...>& filters = {}, const Without<Excludes...>& excludes = {}) noexcept {
-        return reg.view<Comps...>(
-            {typeid(Comps).hash_code()..., typeid(Filters).hash_code()...},
-            {typeid(Excludes).hash_code()...}
-        );
+    requires (
+        (IsNotEmptyConcept<Comps> && ...) &&
+        IsNotSameConcept<Comps..., Filters..., Excludes...> &&
+        !(std::is_reference_v<Comps> || ...) &&
+        !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
+        !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
+    )
+    [[nodiscard]] auto view(WithInactive, With<Filters...> = {}, Without<Excludes...> = {}) noexcept -> const View<Comps...> {
+        return reg.view<Comps...>({typeid(Comps).hash_code()..., typeid(Filters).hash_code()...}, {typeid(Excludes).hash_code()...});
     }
 
     template <typename... Comps, typename... Filters, typename... Excludes>
-    [[nodiscard]] const View<Comps...> view(const WithInactive&, const Without<Excludes...>& excludes, const With<Filters...>& filters = {}) noexcept {
-        return reg.view<Comps...>(
-            {typeid(Comps).hash_code()..., typeid(Filters).hash_code()...},
-            {typeid(Excludes).hash_code()...}
-        );
+    requires (
+        (IsNotEmptyConcept<Comps> && ...) &&
+        IsNotSameConcept<Comps..., Filters..., Excludes...> &&
+        !(std::is_reference_v<Comps> || ...) &&
+        !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
+        !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
+    )
+    [[nodiscard]] auto view(WithInactive, Without<Excludes...>, With<Filters...> = {}) noexcept -> const View<Comps...> {
+        return reg.view<Comps...>({typeid(Comps).hash_code()..., typeid(Filters).hash_code()...}, {typeid(Excludes).hash_code()...});
     }
 
-    template <typename... Comps> requires (std::copy_constructible<Comps> && ...)
-    Ent newEnt(const Comps&... comps) noexcept {
+    template <typename... Comps> requires ((std::copy_constructible<Comps> && ...) && (IsFinalConcept<Comps> && ...) && IsNotSameConcept<Comps...>)
+    auto newEnt(const Comps&... comps) noexcept -> const Ent {
         return lateUpgrade.newEnt(
             reg.getEntToken(),
             {{typeid(Comps).hash_code(), std::make_any<Comps>(comps)}...}
         );
     }
 
-    template <typename Comp, typename... Comps> requires (std::copy_constructible<Comp>)
-    std::optional<std::tuple<Comp&, Comps&...>> add(const Ent ent, const Comp& comp, const Comps&... comps) noexcept {
+    template <typename Comp, typename... Comps> requires ((std::copy_constructible<Comp>) && (IsFinalConcept<Comp>) && IsNotSameConcept<Comps...>)
+    auto add(const Ent& ent, const Comp& comp, const Comps&... comps) noexcept -> std::optional<std::tuple<Comp&, Comps&...>> {
         if (reg.exist(ent)) {
             lateUpgrade.add(
+                reg,
                 ent,
                 std::initializer_list<std::pair<const Type, std::any>>{
                     {typeid(Comp).hash_code(), std::make_any<Comp>(comp)},
@@ -1716,20 +2182,20 @@ public:
                 }
             );
         } else {
-            printf("World::add(): Impossible d'ajouter sur une entitée qui n'existe pas [type: %s]\n", typeid(Comp).name());
-            (printf("World::add(): Impossible d'ajouter sur une entitée qui n'existe pas [type: %s]\n", typeid(Comps).name()), ...);
+            std::println("World::add(): Impossible d'ajouter sur une entitée qui n'existe pas [type: {}]", typeid(Comp).name());
+            (std::println("World::add(): Impossible d'ajouter sur une entitée qui n'existe pas [type: {}]", typeid(Comps).name()), ...);
             return std::nullopt;
         }
 
-        return std::forward_as_tuple(internalGet<Comp>(ent).value(), internalGet<Comps>(ent).value()...);
+        return std::forward_as_tuple(internalGetThisFrame<Comp>(ent).value(), internalGetThisFrame<Comps>(ent).value()...);
     }
 
     template <typename T, typename... Ts>
-    void remove(const Ent ent) noexcept {
+    void remove(const Ent& ent) noexcept {
         if (reg.has(ent, {typeid(T).hash_code()})) {
             lateUpgrade.remove(ent, typeid(T).hash_code());
         } else {
-            printf("World::remove(): Impossible de supprimer un composant qui n'existe pas - %s\n", typeid(T).name());
+            std::println("World::remove(): Impossible de supprimer un composant qui n'existe pas - {}", typeid(T).name());
         }
 
         if constexpr (sizeof...(Ts) > 0) {
@@ -1737,53 +2203,32 @@ public:
         }
     }
 
-    void destroy(const Ent ent) noexcept {
+    void destroy(const Ent& ent) noexcept {
         if (reg.exist(ent)) {
-            lateUpgrade.destroy(reg, ent);
+            lateUpgrade.destroy(ent);
         } else {
-            printf("World::destroy(): Impossible de supprimer une entitée qui n'existe pas\n");
+            std::println("World::destroy(): Impossible de supprimer une entitée qui n'existe pas");
         }
     }
 
-    void setActive(const Ent ent) noexcept {
-        if (has<IsInactive>(ent)) {
-            remove<IsInactive>(ent);
-            if (auto childrenOpt = getChildren(ent)) {
-                for (auto childEnt: childrenOpt.value().get()) {
-                    setActive(childEnt);
-                }
-            }
-        }
+    void setActive(const Ent& ent) noexcept {
+        lateUpgrade.setActive(ent);
     }
 
-    void setInactive(const Ent ent) noexcept {
-        if (!has<IsInactive>(ent)) {
-            add(ent, IsInactive());
-            if (auto childrenOpt = getChildren(ent)) {
-                for (auto childEnt: childrenOpt.value().get()) {
-                    setInactive(childEnt);
-                }
-            }
-        }
+    void setInactive(const Ent& ent) noexcept {
+        lateUpgrade.setInactive(ent);
     }
 
-    [[nodiscard]] constexpr std::size_t getTotalEntities() const noexcept {
+    [[nodiscard]] constexpr auto getTotalEntities() const noexcept -> std::size_t {
         return reg.entArch.size();
     }
 
-    void addDontDestroyOnLoad(const Ent ent) noexcept {
-        if (!has<DontDestroyOnLoad>(ent)) {
-            add(ent, DontDestroyOnLoad());
-            if (auto childrenOpt = getChildren(ent)) {
-                for (auto childEnt: childrenOpt.value().get()) {
-                    addDontDestroyOnLoad(childEnt);
-                }
-            }
-        }
+    void addDontDestroyOnLoad(const Ent& ent) noexcept {
+        lateUpgrade.addDontDestroyOnLoad(ent);
     }
 
-    void loadScene(void(*newScene)(World&)) noexcept {
-        lateUpgrade.loadScene(newScene);
+    void loadScene(std::function<void(SceneSystem, World&)>&& newScene) noexcept {
+        lateUpgrade.loadScene(std::move(newScene));
     }
 
     void stopRun(bool val = true) noexcept {
@@ -1791,15 +2236,7 @@ public:
     }
 
     void upgrade() noexcept {
-#ifdef ZER_DEBUG_INTEGRITY
-    try {
-#endif
         lateUpgrade.upgrade(*this, reg);
-#ifdef ZER_DEBUG_INTEGRITY
-    } catch(const std::exception& except) {
-        printf("World::%s: %s\n", __func__, except.what());
-    }
-#endif
     }
 
 private:
@@ -1818,127 +2255,146 @@ public:
         world.res.emplace(typeid(Time).hash_code(), std::make_any<Time>(0.02f));
     }
 
-    [[nodiscard]] constexpr ZerEngine& useMultithreading(bool newVal) noexcept {
+    [[nodiscard]] constexpr auto useMultithreading(bool newVal) noexcept -> ZerEngine& {
         world.sys.useMultithreading(newVal);
         return *this;
     }
 
-    [[nodiscard]] constexpr ZerEngine& setFixedTimeStep(float newFixedTimeStep) noexcept {
+    [[nodiscard]] constexpr auto setFixedTimeStep(float newFixedTimeStep) noexcept -> ZerEngine& {
         auto [time] = world.resource<Time>();
         time.setFixedTimeStep(newFixedTimeStep);
         return *this;
     }
 
-    template <typename T, typename... Args> requires (std::copy_constructible<T>)
-    [[nodiscard]] ZerEngine& addResource(Args&&... args) noexcept {
+    template <typename T, typename... Args> requires ((std::copy_constructible<T>) && (IsFinalConcept<T>))
+    [[nodiscard]] auto addResource(Args&&... args) noexcept -> ZerEngine& {
         world.res.emplace(typeid(T).hash_code(), std::make_any<T>(std::forward<Args>(args)...));
         return *this;
     }
 
     template <typename T, typename... Args>
-    [[nodiscard]] ZerEngine& addPlugin(void(*pluginFunc)(ZerEngine&)) noexcept {
+    [[nodiscard]] auto addPlugin(std::function<void(ZerEngine&)>&& pluginFunc) noexcept -> ZerEngine& {
         pluginFunc(*this);
         return *this;
     }
 
-    [[nodiscard]] ZerEngine& addStartSystems(void(*const func)(StartSystem, World&)) noexcept {
-        world.sys.addStartSys(func);
+    [[nodiscard]] auto addSystems(StartSystem, std::function<void(StartSystem, World&)>&& func) noexcept -> ZerEngine& {
+        world.sys.addStartSys(std::move(func));
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(MainSystem, World&)> || std::same_as<Funcs, void(&)(MainSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addMainSystems(Funcs&&... funcs) noexcept {
-        world.sys.addMainCondSys(nullptr, std::forward<Funcs>(funcs)...);
+    [[nodiscard]] auto addSystems(MainSystem, std::initializer_list<std::function<void(MainSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addMainCondSys(nullptr, std::move(funcs));
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(MainSystem, World&)> || std::same_as<Funcs, void(&)(MainSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addMainConditionSystems(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        world.sys.addMainCondSys(cond, std::forward<Funcs>(funcs)...);
+    [[nodiscard]] auto addSystems(MainSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addMainCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(MainFixedSystem, World&)> || std::same_as<Funcs, void(&)(MainFixedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addMainFixedSystems(Funcs&&... funcs) noexcept {
-        world.sys.addMainFixedCondSys(nullptr, std::forward<Funcs>(funcs)...);
+    [[nodiscard]] auto addSystems(MainFixedSystem, std::initializer_list<std::function<void(MainFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addMainFixedCondSys(nullptr, std::move(funcs));
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(MainFixedSystem, World&)> || std::same_as<Funcs, void(&)(MainFixedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addMainFixedConditionSystems(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        world.sys.addMainFixedCondSys(cond, std::forward<Funcs>(funcs)...);
+    [[nodiscard]] auto addSystems(MainFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addMainFixedCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(ThreadedSystem, World&)> || std::same_as<Funcs, void(&)(ThreadedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addThreadedSystems(Funcs&&... funcs) noexcept {
-        world.sys.addThreadedCondSys(nullptr, std::forward<Funcs>(funcs)...);
+    [[nodiscard]] auto addSystems(MainUnscaledFixedSystem, std::initializer_list<std::function<void(MainUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addMainUnscaledFixedCondSys(nullptr, std::move(funcs));
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(ThreadedSystem, World&)> || std::same_as<Funcs, void(&)(ThreadedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addThreadedConditionSystems(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        world.sys.addThreadedCondSys(cond, std::forward<Funcs>(funcs)...);
+    [[nodiscard]] auto addSystems(MainUnscaledFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addMainUnscaledFixedCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(ThreadedFixedSystem, World&)> || std::same_as<Funcs, void(&)(ThreadedFixedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addThreadedFixedSystems(Funcs&&... funcs) noexcept {
-        world.sys.addThreadedFixedCondSys(nullptr, std::forward<Funcs>(funcs)...);
+    [[nodiscard]] auto addSystems(ThreadedSystem, std::initializer_list<std::function<void(ThreadedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addThreadedCondSys(nullptr, std::move(funcs));
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(ThreadedFixedSystem, World&)> || std::same_as<Funcs, void(&)(ThreadedFixedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addThreadedFixedConditionSystems(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        world.sys.addThreadedFixedCondSys(cond, std::forward<Funcs>(funcs)...);
+    [[nodiscard]] auto addSystems(ThreadedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(ThreadedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addThreadedCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(LateSystem, World&)> || std::same_as<Funcs, void(&)(LateSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addLateSystems(Funcs&&... funcs) noexcept {
-        world.sys.addLateCondSys(nullptr, std::forward<Funcs>(funcs)...);
+    [[nodiscard]] auto addSystems(const ThreadedFixedSet& newSet) noexcept -> ZerEngine& {
+        world.sys.addThreadedFixedCondSys(newSet);
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(LateSystem, World&)> || std::same_as<Funcs, void(&)(LateSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addLateConditionSystems(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        world.sys.addLateCondSys(cond, std::forward<Funcs>(funcs)...);
+    [[nodiscard]] auto addSystems(ThreadedUnscaledFixedSystem, std::initializer_list<std::function<void(ThreadedUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addThreadedUnscaledFixedCondSys(nullptr, std::move(funcs));
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(LateFixedSystem, World&)> || std::same_as<Funcs, void(&)(LateFixedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addLateFixedSystems(Funcs&&... funcs) noexcept {
-        world.sys.addLateFixedCondSys(nullptr, std::forward<Funcs>(funcs)...);
+    [[nodiscard]] auto addSystems(ThreadedUnscaledFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(ThreadedUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addThreadedUnscaledFixedCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
 
-    template <typename... Funcs> requires ((std::same_as<Funcs, void(&)(LateFixedSystem, World&)> || std::same_as<Funcs, void(&)(LateFixedSystem, World&) noexcept>) && ...)
-    [[nodiscard]] ZerEngine& addLateFixedConditionSystems(bool(*const cond)(World&), Funcs&&... funcs) noexcept {
-        world.sys.addLateFixedCondSys(cond, std::forward<Funcs>(funcs)...);
+    [[nodiscard]] auto addSystems(LateSystem, std::initializer_list<std::function<void(LateSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addLateCondSys(nullptr, std::move(funcs));
+        return *this;
+    }
+
+    [[nodiscard]] auto addSystems(LateSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addLateCondSys(std::move(cond), std::move(funcs));
+        return *this;
+    }
+
+    [[nodiscard]] auto addSystems(LateFixedSystem, std::initializer_list<std::function<void(LateFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addLateFixedCondSys(nullptr, std::move(funcs));
+        return *this;
+    }
+
+    [[nodiscard]] auto addSystems(LateFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addLateFixedCondSys(std::move(cond), std::move(funcs));
+        return *this;
+    }
+
+    [[nodiscard]] auto addSystems(LateUnscaledFixedSystem, std::initializer_list<std::function<void(LateUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addLateUnscaledFixedCondSys(nullptr, std::move(funcs));
+        return *this;
+    }
+
+    [[nodiscard]] auto addSystems(LateUnscaledFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+        world.sys.addLateUnscaledFixedCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
 
     void run() noexcept {
         world.isRunning = true;
         world.sys.start(world);
+        world.upgrade();
         while (world.isRunning) {
-            world.upgrade();
-
             auto [time] = world.resource<Time>();
             time.update();
 
             world.sys.run(world);
 
             if (time.isTimeStep()) {
+                if (time.timeScale != 0) {
+                    for (unsigned int i = 0; i < time.getNbFixedSteps(); i++) {
+                        world.upgrade();
+                        world.sys.runFixed(world);
+                    }
+                }
                 for (unsigned int i = 0; i < time.getNbFixedSteps(); i++) {
                     world.upgrade();
-                    world.sys.runFixed(world);
+                    world.sys.runUnscaledFixed(world);
                 }
             }
 
+            world.upgrade();
             world.sys.runLate(world);
+            world.upgrade();
         }
-        world.upgrade();
     }
 
 private:

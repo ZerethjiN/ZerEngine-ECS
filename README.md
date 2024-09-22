@@ -3,7 +3,7 @@
 
 A simple ECS logic core.
 
-* /!\ C++26 Minimum /!\
+* /!\ C++23 Minimum /!\
 * Cache Friendly Component managed by Archetypal.
 * Dynamic resource added by user and easy to access.
 * Simple implementation of components without inheritance.
@@ -15,8 +15,8 @@ A simple ECS logic core.
 #include <Zerengine.hpp>
 
 // Ressouces declaration.
-struct AppState {
-    enum AppStateType: size_t {
+struct AppState final {
+    enum class AppStateType: size_t {
         HOME_SCREEN,
         IN_GAME
     };
@@ -29,19 +29,19 @@ struct AppState {
 };
 
 // Components declaration.
-struct Position {
+struct Position final {
     float x;
     float y;
 };
 
-struct Velocity {
+struct Velocity final {
     float x;
     float y;
 };
 
-struct Player {};
+struct Player final {};
 
-struct PlayerDash {
+struct PlayerDash final {
     float cooldown;
     float curTime;
     float dashSpeed;
@@ -71,6 +71,7 @@ void initPos(StartSystem, World& world) {
 // Systems executed on each frame.
 void movePosSys(ThreadedFixedSystem, World& world) {
     auto positions = world.view<Position, const Velocity>();
+
     auto [time] = world.resource<const Time>();
 
     for (auto [_, position, velocity]: positions) {
@@ -91,6 +92,7 @@ void playerActionSys(ThreadedSystem, World& world) {
 
 void playerDashSys(ThreadedSystem, World& world) {
     auto players = world.view<PlayerDash, Velocity>();
+
     auto [time] = world.resource<const Time>();
 
     for (auto [playerEnt, playerDash, velocity]: players) {
@@ -114,17 +116,31 @@ int main() {
         .setFixedTimeStep(0.02f) // <== Set fixed time step for fixed systems
         .addResource<AppState>(AppState::IN_GAME)
         .addStartSys(initPos)
-        .addMainSystems(stopRunSys)
-        .addThreadedSystems(playerActionSys, playerDashSys) // Systems work at the same time
-        .addThreadedFixedSystems(movePosSys) // <== Systems work at fixed time
-        .addThreadedConditionSystems(
+        .addSystems(mainSystem, stopRunSys)
+        .addSystems(threadedFixedSystems,
+            {
+                playerActionSys, playerDashSys
+            }
+        ) // Systems work at the same time
+        .addSystems(threadedFixedSystem,
+            {
+                movePosSys
+            }
+        ) // <== Systems work at fixed time
+        .addSystems(threadedFixedSystem,
             [](World& world) -> bool {
                 auto [appState] = world.resource<const AppState>();
                 return appState == AppState::IN_GAME;
             },
-            /** This Systems only runs if condition is true **/
+            {
+                /** This Systems only runs if condition is true **/
+            }
         )
-        .addLateSystems(/*...*/)
+        .addSystems(lateSystem,
+            {
+                /*...*/
+            }
+        )
         .run();
 
     return 0;
