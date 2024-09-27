@@ -21,11 +21,11 @@ struct AppState final {
         IN_GAME
     };
 
-    AppState(AppStateType newCurAppState):
-        curAppState(newCurAppState) {
+    AppState(AppStateType new_cur_app_state):
+        cur_app_state(new_cur_app_state) {
     }
 
-    AppStateType curAppState;
+    AppStateType cur_app_state;
 };
 
 // Components declaration.
@@ -43,33 +43,45 @@ struct Player final {};
 
 struct PlayerDash final {
     float cooldown;
-    float curTime;
-    float dashSpeed;
+    float cur_time;
+    float dash_speed;
 
-    bool canStopDash(float delta) {
-        curTime += delta;
-        return curTime >= cooldown;
+    auto can_stop_dash(float delta) -> bool {
+        cur_time += delta;
+        return cur_time >= cooldown;
     }
 };
 
 // Initialization system executed only once at startup.
-void initPos(StartSystem, World& world) {
-    world.newEnt(
-        Player{},
-        Position{0.0f, 0.0f},
-        Velocity{0.0f, 0.0f}
+auto init_pos(StartSystem, World& world) -> void {
+    world.create_entity(
+        Player {},
+        Position {
+            .x = 0.0f,
+            .y = 0.0f,
+        },
+        Velocity {
+            .x = 0.0f,
+            .y = 0.0f,
+        }
     );
 
-    for (float i = 0; i < 5; i++) {
-        world.newEnt(
-            Position{i + 10.f, i + 20.f},
-            Velocity{10.f, 10.f}
+    for (float i = 0; i < 5; i += 1.0f) {
+        world.create_entity(
+            Position {
+                .x = i + 10.f,
+                .y = i + 20.f,
+            },
+            Velocity {
+                .x = 10.f,
+                .y = 10.f,
+            }
         );
     }
 }
 
 // Systems executed on each frame.
-void movePosSys(ThreadedFixedSystem, World& world) {
+auto move_pos_sys(ThreadedFixedSystem, World& world) -> void {
     auto positions = world.view<Position, const Velocity>();
 
     auto [time] = world.resource<const Time>();
@@ -80,63 +92,69 @@ void movePosSys(ThreadedFixedSystem, World& world) {
     }
 }
 
-void playerActionSys(ThreadedSystem, World& world) {
+auto player_action_sys(ThreadedSystem, World& world) -> void {
     auto players = world.view(with<Player>, without<PlayerDash>);
 
-    for (auto [playerEnt]: players) {
+    for (auto [player_ent]: players) {
         if (/*Dash Button Pressed*/) {
-            world.add(playerEnt, PlayerDash{0.5f, 0.0f, 8.0f});
+            world.add_components(player_ent,
+                PlayerDash {
+                    .cooldown = 0.5f,
+                    .cur_time = 0.0f,
+                    .dash_speed = 8.0f,
+                }
+            );
         }
     }
 }
 
-void playerDashSys(ThreadedSystem, World& world) {
+auto player_dash_sys(ThreadedSystem, World& world) -> void {
     auto players = world.view<PlayerDash, Velocity>();
 
     auto [time] = world.resource<const Time>();
 
-    for (auto [playerEnt, playerDash, velocity]: players) {
-        if (playerDash.canStopDash(time.deltaTime())) {
-            world.remove<PlayerDash>(playerEnt);
+    for (auto [player_ent, player_dash, velocity]: players) {
+        if (playerDash.can_stop_dash(time.deltaTime())) {
+            world.remove_components<PlayerDash>(playerEnt);
             velocity.x = 0;
         } else {
-            velocity.x += playerDash.dashSpeed;
+            velocity.x += playerDash.dash_speed;
         }
     }
 }
 
-void stopRunSys(MainSystem, World& world) {
-    world.stopRun();
+auto stop_run_sys(MainSystem, World& world) -> void {
+    world.stop_run();
 }
 
-int main() {
+auto main() -> int {
     // Our application.
     ZerEngine()
-        .useMultithreading(true) // <== optional
-        .setFixedTimeStep(0.02f) // <== Set fixed time step for fixed systems
-        .addResource<AppState>(AppState::IN_GAME)
-        .addStartSys(initPos)
-        .addSystems(mainSystem, stopRunSys)
-        .addSystems(threadedFixedSystems,
+        .use_multithreading(true) // <== optional
+        .set_fixed_time_step(0.02f) // <== Set fixed time step for fixed systems
+        .add_resource<AppState>(AppState::IN_GAME)
+        .add_systems(startSystem, init_pos)
+        .add_systems(mainSystem, stop_run_sys)
+        .add_systems(threadedFixedSystems,
             {
-                playerActionSys, playerDashSys
+                player_action_sys, player_dash_sys
             }
         ) // Systems work at the same time
-        .addSystems(threadedFixedSystem,
+        .add_systems(threadedFixedSystem,
             {
-                movePosSys
+                move_pos_sys
             }
         ) // <== Systems work at fixed time
-        .addSystems(threadedFixedSystem,
+        .add_systems(threadedFixedSystem,
             [](World& world) -> bool {
-                auto [appState] = world.resource<const AppState>();
-                return appState == AppState::IN_GAME;
+                auto [app_state] = world.resource<const AppState>();
+                return app_state == AppState::IN_GAME;
             },
             {
                 /** This Systems only runs if condition is true **/
             }
         )
-        .addSystems(lateSystem,
+        .add_systems(lateSystem,
             {
                 /*...*/
             }

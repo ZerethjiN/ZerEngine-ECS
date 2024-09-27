@@ -28,15 +28,15 @@ using Type = std::size_t;
 template <typename... Filters>
 class With final {};
 template <typename... Filters>
-constexpr inline With<Filters...> with;
+static constexpr inline With<Filters...> with;
 
 template <typename... Excludes>
 class Without final {};
 template <typename... Excludes>
-constexpr inline Without<Excludes...> without;
+static constexpr inline Without<Excludes...> without;
 
 class WithInactive final {};
-constexpr inline WithInactive withInactive;
+static constexpr inline WithInactive withInactive;
 
 class IsInactive final {};
 class DontDestroyOnLoad final {};
@@ -47,25 +47,25 @@ protected:
 };
 
 class StartSystem final: protected ISystem {};
-constexpr inline StartSystem startSystem;
+static constexpr inline StartSystem startSystem;
 class MainSystem final: protected ISystem {};
-constexpr inline MainSystem mainSystem;
+static constexpr inline MainSystem mainSystem;
 class MainFixedSystem final: protected ISystem {};
-constexpr inline MainFixedSystem mainFixedSystem;
+static constexpr inline MainFixedSystem mainFixedSystem;
 class MainUnscaledFixedSystem final: protected ISystem {};
-constexpr inline MainUnscaledFixedSystem mainUnscaledFixedSystem;
+static constexpr inline MainUnscaledFixedSystem mainUnscaledFixedSystem;
 class ThreadedSystem final: protected ISystem {};
-constexpr inline ThreadedSystem threadedSystem;
+static constexpr inline ThreadedSystem threadedSystem;
 class ThreadedFixedSystem final: protected ISystem {};
-constexpr inline ThreadedFixedSystem threadedFixedSystem;
+static constexpr inline ThreadedFixedSystem threadedFixedSystem;
 class ThreadedUnscaledFixedSystem final: protected ISystem {};
-constexpr inline ThreadedUnscaledFixedSystem threadedUnscaledFixedSystem;
+static constexpr inline ThreadedUnscaledFixedSystem threadedUnscaledFixedSystem;
 class LateSystem final: protected ISystem {};
-constexpr inline LateSystem lateSystem;
+static constexpr inline LateSystem lateSystem;
 class LateFixedSystem final: protected ISystem {};
-constexpr inline LateFixedSystem lateFixedSystem;
+static constexpr inline LateFixedSystem lateFixedSystem;
 class LateUnscaledFixedSystem final: protected ISystem {};
-constexpr inline LateUnscaledFixedSystem lateUnscaledFixedSystem;
+static constexpr inline LateUnscaledFixedSystem lateUnscaledFixedSystem;
 
 class SceneSystem final {};
 
@@ -1692,10 +1692,10 @@ private:
     }
 
     void runFixed(World& world) noexcept {
-        for (const auto& mainFunc: mainFixedSystems) {
-            if (mainFunc.first == nullptr || mainFunc.first(world)) {
-                for (const auto& mainRow: mainFunc.second) {
-                    mainRow(mainFixedSystem, world);
+        for (const auto& [condition, systems]: mainFixedSystems) {
+            if (condition == nullptr || condition(world)) {
+                for (const auto& system: systems) {
+                    system(mainFixedSystem, world);
                 }
             }
         }
@@ -1881,7 +1881,7 @@ private:
     }
 
 public:
-    [[nodiscard("La valeur de retour d'une commande Exist doit toujours etre evalue")]] auto exist(const Ent& ent) const noexcept -> bool {
+    [[nodiscard("La valeur de retour d'une commande Exist doit toujours etre evalue")]] auto entity_exists(const Ent& ent) const noexcept -> bool {
         return reg.exist(ent);
     }
 
@@ -1892,19 +1892,19 @@ public:
         }
         if (reg.has(ent, {typeid(T).hash_code()})) {
             if constexpr (sizeof...(Ts) > 0) {
-                return has<Ts...>(ent);
+                return has_components<Ts...>(ent);
             }
             return true;
         }
         if (auto addEntsIt = lateUpgrade.addEnts.find(ent); addEntsIt != lateUpgrade.addEnts.end() && addEntsIt->second.contains(typeid(T).hash_code())) {
             if constexpr (sizeof...(Ts) > 0) {
-                return has<Ts...>(ent);
+                return has_components<Ts...>(ent);
             }
             return true;
         }
         if (auto addCompsIt = lateUpgrade.addComps.find(ent); addCompsIt != lateUpgrade.addComps.end() && addCompsIt->second.contains(typeid(T).hash_code())) {
             if constexpr (sizeof...(Ts) > 0) {
-                return has<Ts...>(ent);
+                return has_components<Ts...>(ent);
             }
             return true;
         }
@@ -1912,7 +1912,7 @@ public:
     }
 
     template <typename T, typename... Ts> requires ((!std::is_reference_v<T> || (!std::is_reference_v<Ts> || ...)) && (!std::is_const_v<T> || (!std::is_const_v<Ts> || ...)))
-    [[nodiscard("La valeur de retour d'une commande Has doit toujours etre evalue")]] auto has(const Ent& ent) const noexcept -> bool {
+    [[nodiscard("La valeur de retour d'une commande Has doit toujours etre evalue")]] auto has_components(const Ent& ent) const noexcept -> bool {
         // if (!reg.exist(ent)) {
         //     return false;
         // } else if (reg.has(ent, {typeid(T).hash_code()})) {
@@ -2008,7 +2008,7 @@ public:
     }
 
     template <typename T, typename... Ts> requires (IsNotEmptyConcept<T> && IsFinalConcept<T> && IsNotSameConcept<T, Ts...> && !std::is_reference_v<T>)
-    [[nodiscard("La valeur de retour d'une commande Get doit toujours etre recupere")]] auto get(const Ent& ent) noexcept -> std::optional<std::tuple<T&, Ts&...>> {
+    [[nodiscard("La valeur de retour d'une commande Get doit toujours etre recupere")]] auto get_components(const Ent& ent) noexcept -> std::optional<std::tuple<T&, Ts&...>> {
         // if (auto opt = internalGet<T>(ent)) {
         //     if constexpr (sizeof...(Ts) > 0) {
         //         if (auto othOpt = get<Ts...>(ent)) {
@@ -2024,23 +2024,23 @@ public:
         return getThisFrame<T, Ts...>(ent);
     }
 
-    [[nodiscard("La valeur de retour d'une commande HasParent doit toujours etre evaluer")]] auto hasParent(const Ent& childEnt) const noexcept -> bool {
+    [[nodiscard("La valeur de retour d'une commande HasParent doit toujours etre evaluer")]] auto has_parent(const Ent& childEnt) const noexcept -> bool {
         return reg.hasParent(childEnt);
     }
 
-    [[nodiscard("La valeur de retour d'une commande GetParent doit toujours etre recupere")]] auto getParent(const Ent& childEnt) const noexcept -> std::optional<Ent> {
+    [[nodiscard("La valeur de retour d'une commande GetParent doit toujours etre recupere")]] auto get_parent(const Ent& childEnt) const noexcept -> std::optional<Ent> {
         return reg.getParent(childEnt);
     }
 
-    [[nodiscard("La valeur de retour d'une commande HasChildren doit toujours etre evaluer")]] auto hasChildren(const Ent& parentEnt) const noexcept -> bool {
+    [[nodiscard("La valeur de retour d'une commande HasChildren doit toujours etre evaluer")]] auto has_children(const Ent& parentEnt) const noexcept -> bool {
         return reg.hasChildren(parentEnt);
     }
 
-    [[nodiscard("La valeur de retour d'une commande GetChildren doit toujours etre recupere")]] auto getChildren(const Ent& parentEnt) const noexcept -> std::optional<std::reference_wrapper<const std::unordered_set<Ent>>> {
+    [[nodiscard("La valeur de retour d'une commande GetChildren doit toujours etre recupere")]] auto get_children(const Ent& parentEnt) const noexcept -> std::optional<std::reference_wrapper<const std::unordered_set<Ent>>> {
         return reg.getChildren(parentEnt);
     }
 
-    constexpr auto appendChildren(const Ent& parentEnt, const std::vector<Ent>& childrenEnt) noexcept -> Ent {
+    constexpr auto append_children(const Ent& parentEnt, const std::vector<Ent>& childrenEnt) noexcept -> Ent {
         lateUpgrade.appendChildren(parentEnt, childrenEnt);
         return parentEnt;
     }
@@ -2163,7 +2163,7 @@ public:
     }
 
     template <typename... Comps> requires ((std::copy_constructible<Comps> && ...) && (IsFinalConcept<Comps> && ...) && IsNotSameConcept<Comps...>)
-    auto newEnt(const Comps&... comps) noexcept -> const Ent {
+    auto create_entity(const Comps&... comps) noexcept -> const Ent {
         return lateUpgrade.newEnt(
             reg.getEntToken(),
             {{typeid(Comps).hash_code(), std::make_any<Comps>(comps)}...}
@@ -2171,7 +2171,7 @@ public:
     }
 
     template <typename Comp, typename... Comps> requires ((std::copy_constructible<Comp>) && (IsFinalConcept<Comp>) && IsNotSameConcept<Comps...>)
-    auto add(const Ent& ent, const Comp& comp, const Comps&... comps) noexcept -> std::optional<std::tuple<Comp&, Comps&...>> {
+    auto add_components(const Ent& ent, const Comp& comp, const Comps&... comps) noexcept -> std::optional<std::tuple<Comp&, Comps&...>> {
         if (reg.exist(ent)) {
             lateUpgrade.add(
                 reg,
@@ -2182,8 +2182,8 @@ public:
                 }
             );
         } else {
-            std::println("World::add(): Impossible d'ajouter sur une entitée qui n'existe pas [type: {}]", typeid(Comp).name());
-            (std::println("World::add(): Impossible d'ajouter sur une entitée qui n'existe pas [type: {}]", typeid(Comps).name()), ...);
+            std::println("World::add_component(): Impossible d'ajouter sur une entitée qui n'existe pas [type: {}]", typeid(Comp).name());
+            (std::println("World::add_component(): Impossible d'ajouter sur une entitée qui n'existe pas [type: {}]", typeid(Comps).name()), ...);
             return std::nullopt;
         }
 
@@ -2191,23 +2191,23 @@ public:
     }
 
     template <typename T, typename... Ts>
-    void remove(const Ent& ent) noexcept {
+    void remove_components(const Ent& ent) noexcept {
         if (reg.has(ent, {typeid(T).hash_code()})) {
             lateUpgrade.remove(ent, typeid(T).hash_code());
         } else {
-            std::println("World::remove(): Impossible de supprimer un composant qui n'existe pas - {}", typeid(T).name());
+            std::println("World::remove_component(): Impossible de supprimer un composant qui n'existe pas - {}", typeid(T).name());
         }
 
         if constexpr (sizeof...(Ts) > 0) {
-            remove<Ts...>(ent);
+            remove_components<Ts...>(ent);
         }
     }
 
-    void destroy(const Ent& ent) noexcept {
+    void delete_entity(const Ent& ent) noexcept {
         if (reg.exist(ent)) {
             lateUpgrade.destroy(ent);
         } else {
-            std::println("World::destroy(): Impossible de supprimer une entitée qui n'existe pas");
+            std::println("World::delete_entity(): Impossible de supprimer une entitée qui n'existe pas");
         }
     }
 
@@ -2223,6 +2223,10 @@ public:
         return reg.entArch.size();
     }
 
+    [[nodiscard]] constexpr auto getTotalArchetypes() const noexcept -> std::size_t {
+        return reg.archs.size();
+    }
+
     void addDontDestroyOnLoad(const Ent& ent) noexcept {
         lateUpgrade.addDontDestroyOnLoad(ent);
     }
@@ -2231,7 +2235,7 @@ public:
         lateUpgrade.loadScene(std::move(newScene));
     }
 
-    void stopRun(bool val = true) noexcept {
+    void stop_run(bool val = true) noexcept {
         isRunning = !val;
     }
 
@@ -2251,119 +2255,119 @@ private:
 
 class ZerEngine final {
 public:
-    ZerEngine() {
+    ZerEngine() noexcept {
         world.res.emplace(typeid(Time).hash_code(), std::make_any<Time>(0.02f));
     }
 
-    [[nodiscard]] constexpr auto useMultithreading(bool newVal) noexcept -> ZerEngine& {
+    [[nodiscard]] constexpr auto use_multithreading(bool newVal) noexcept -> ZerEngine& {
         world.sys.useMultithreading(newVal);
         return *this;
     }
 
-    [[nodiscard]] constexpr auto setFixedTimeStep(float newFixedTimeStep) noexcept -> ZerEngine& {
+    [[nodiscard]] constexpr auto set_fixed_time_step(float newFixedTimeStep) noexcept -> ZerEngine& {
         auto [time] = world.resource<Time>();
         time.setFixedTimeStep(newFixedTimeStep);
         return *this;
     }
 
     template <typename T, typename... Args> requires ((std::copy_constructible<T>) && (IsFinalConcept<T>))
-    [[nodiscard]] auto addResource(Args&&... args) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_resource(Args&&... args) noexcept -> ZerEngine& {
         world.res.emplace(typeid(T).hash_code(), std::make_any<T>(std::forward<Args>(args)...));
         return *this;
     }
 
     template <typename T, typename... Args>
-    [[nodiscard]] auto addPlugin(std::function<void(ZerEngine&)>&& pluginFunc) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_plugin(std::function<void(ZerEngine&)>&& pluginFunc) noexcept -> ZerEngine& {
         pluginFunc(*this);
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(StartSystem, std::function<void(StartSystem, World&)>&& func) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(StartSystem, std::function<void(StartSystem, World&)>&& func) noexcept -> ZerEngine& {
         world.sys.addStartSys(std::move(func));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(MainSystem, std::initializer_list<std::function<void(MainSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(MainSystem, std::initializer_list<std::function<void(MainSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addMainCondSys(nullptr, std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(MainSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(MainSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addMainCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(MainFixedSystem, std::initializer_list<std::function<void(MainFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(MainFixedSystem, std::initializer_list<std::function<void(MainFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addMainFixedCondSys(nullptr, std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(MainFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(MainFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addMainFixedCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(MainUnscaledFixedSystem, std::initializer_list<std::function<void(MainUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(MainUnscaledFixedSystem, std::initializer_list<std::function<void(MainUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addMainUnscaledFixedCondSys(nullptr, std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(MainUnscaledFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(MainUnscaledFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addMainUnscaledFixedCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(ThreadedSystem, std::initializer_list<std::function<void(ThreadedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(ThreadedSystem, std::initializer_list<std::function<void(ThreadedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addThreadedCondSys(nullptr, std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(ThreadedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(ThreadedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(ThreadedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(ThreadedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addThreadedCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(const ThreadedFixedSet& newSet) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(const ThreadedFixedSet& newSet) noexcept -> ZerEngine& {
         world.sys.addThreadedFixedCondSys(newSet);
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(ThreadedUnscaledFixedSystem, std::initializer_list<std::function<void(ThreadedUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(ThreadedUnscaledFixedSystem, std::initializer_list<std::function<void(ThreadedUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addThreadedUnscaledFixedCondSys(nullptr, std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(ThreadedUnscaledFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(ThreadedUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(ThreadedUnscaledFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(ThreadedUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addThreadedUnscaledFixedCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(LateSystem, std::initializer_list<std::function<void(LateSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(LateSystem, std::initializer_list<std::function<void(LateSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addLateCondSys(nullptr, std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(LateSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(LateSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addLateCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(LateFixedSystem, std::initializer_list<std::function<void(LateFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(LateFixedSystem, std::initializer_list<std::function<void(LateFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addLateFixedCondSys(nullptr, std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(LateFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(LateFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addLateFixedCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(LateUnscaledFixedSystem, std::initializer_list<std::function<void(LateUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(LateUnscaledFixedSystem, std::initializer_list<std::function<void(LateUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addLateUnscaledFixedCondSys(nullptr, std::move(funcs));
         return *this;
     }
 
-    [[nodiscard]] auto addSystems(LateUnscaledFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
+    [[nodiscard]] auto add_systems(LateUnscaledFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
         world.sys.addLateUnscaledFixedCondSys(std::move(cond), std::move(funcs));
         return *this;
     }
