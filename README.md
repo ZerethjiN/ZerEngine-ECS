@@ -29,19 +29,19 @@ struct AppState final {
 };
 
 // Components declaration.
-struct Position final {
+struct Position final: public IComponent {
     float x;
     float y;
 };
 
-struct Velocity final {
+struct Velocity final: public IComponent {
     float x;
     float y;
 };
 
-struct Player final {};
+struct Player final: public IComponent {};
 
-struct PlayerDash final {
+struct PlayerDash final: public IComponent {
     float cooldown;
     float cur_time;
     float dash_speed;

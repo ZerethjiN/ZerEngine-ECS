@@ -11,6 +11,7 @@
 #include <functional>
 #include <initializer_list>
 #include <iterator>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <print>
@@ -21,6 +22,10 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+static constexpr inline std::size_t ZERENGINE_VERSION_MAJOR = 24;
+static constexpr inline std::size_t ZERENGINE_VERSION_MINOR = 10;
+static constexpr inline std::size_t ZERENGINE_VERSION_PATCH = 0;
 
 using Ent = std::size_t;
 using Type = std::size_t;
@@ -38,8 +43,16 @@ static constexpr inline Without<Excludes...> without;
 class WithInactive final {};
 static constexpr inline WithInactive withInactive;
 
-class IsInactive final {};
-class DontDestroyOnLoad final {};
+class IComponent {
+protected:
+    constexpr IComponent() noexcept = default;
+
+public:
+    constexpr ~IComponent() noexcept = default;
+};
+
+class IsInactive final: public IComponent {};
+class DontDestroyOnLoad final: public IComponent {};
 
 class ISystem {
 protected:
@@ -100,193 +113,18 @@ concept IsFinalConcept = [] -> bool {
 
 ///////////////////////////////////////////////////////////////////////////////////
 
-// class CompAny final {
-// public:
-//     constexpr CompAny() noexcept:
-//         manager(nullptr) {
-//     }
-
-//     CompAny(const CompAny& other) {
-//         if (!other.has_value()) {
-//             manager = nullptr;
-//         } else {
-//             CompArg arg;
-//             arg.any = this;
-//             other.manager(OP_CLONE, &other, &arg);
-//         }
-//     }
-
-//     CompAny(CompAny&& other) noexcept {
-//         if (!other.has_value()) {
-//             manager = nullptr;
-//         } else {
-//             CompArg arg;
-//             arg.any = this;
-//             other.manager(OP_TRANSFER, &other, &arg);
-//         }
-//     }
-
-//     template <typename T> requires (std::copy_constructible<T>)
-//     CompAny(T&& value):
-//         data(new T{std::move(value)}),
-//         manager(&compAnyManager<T>) {
-//     }
-
-//     template <typename T, typename... Args> requires (std::constructible_from<T, Args...>)
-//     CompAny(std::in_place_type_t<T>, Args&&... args):
-//         data(new T{std::forward<Args>(args)...}),
-//         manager(&compAnyManager<T>) {
-//     }
-
-//     ~CompAny() {
-//         reset();
-//     }
-
-//     CompAny& operator=(const CompAny& rhs) {
-//         *this = CompAny(rhs);
-//         return *this;
-//     }
-
-//     CompAny& operator=(CompAny&& rhs) noexcept {
-//         if (!rhs.has_value()) {
-//             reset();
-//         } else if (this != &rhs) {
-//             reset();
-//             CompArg arg;
-//             arg.any = this;
-//             rhs.manager(OP_TRANSFER, &rhs, &arg);
-//         }
-//         return *this;
-//     }
-
-//     template <typename T> requires (std::copy_constructible<T>)
-//     CompAny& operator=(T&& rhs) {
-//         *this = CompAny(std::move(rhs));
-//         return *this;
-//     }
-
-// public:
-//     template <typename T, typename... Args> requires (std::constructible_from<T, Args...>)
-//     T& emplace(Args&&... args) {
-//         data = new T{std::forward<Args>(args)...};
-//         manager = &compAnyManager<T>;
-//         return *static_cast<T*>(data);
-//     }
-
-//     void swap(CompAny& rhs) noexcept {
-//         if (!has_value() && !rhs.has_value()) {
-//             return;
-//         }
-
-//         if (has_value() && rhs.has_value()) {
-//             if (this == &rhs) {
-//                 return;
-//             }
-
-//             CompAny tmp;
-//             CompArg arg;
-//             arg.any = &tmp;
-//             rhs.manager(OP_TRANSFER, &rhs, &arg);
-//             arg.any = &rhs;
-//             manager(OP_TRANSFER, this, &arg);
-//             arg.any = this;
-//             tmp.manager(OP_TRANSFER, &tmp, &arg);
-//         } else {
-//             CompAny* empty = !has_value() ? this : &rhs;
-//             CompAny* full = !has_value() ? &rhs : this;
-//             CompArg arg;
-//             arg.any = empty;
-//             full->manager(OP_TRANSFER, full, &arg);
-//         }
-//     }
-
-//     void reset() noexcept {
-//         if (has_value()) {
-//             manager(OP_DESTROY, this, nullptr);
-//             manager = nullptr;
-//         }
-//     }
-
-//     bool has_value() const {
-//         return manager != nullptr;
-//     }
-
-//     const std::type_info& type() const noexcept {
-//         if (!has_value()) {
-//             return typeid(void);
-//         }
-//         CompArg arg;
-//         manager(OP_TYPE, this, &arg);
-//         return *arg.typeinfo;
-//     }
-
-// private:
-//     enum CompOp: uint8_t {
-//         OP_ACCESS, OP_TYPE, OP_CLONE, OP_DESTROY, OP_TRANSFER
-//     };
-
-//     union CompArg {
-//         void* data;
-//         const std::type_info* typeinfo;
-//         CompAny* any;
-//     };
-
-// private:
-//     template <typename T>
-//     static void compAnyManager(CompOp op, const CompAny* any, CompArg* arg) {
-//         auto ptr = static_cast<const T*>(any->data);
-//         switch (op) {
-//             case CompOp::OP_ACCESS:
-//                 arg->data = const_cast<T*>(ptr);
-//                 break;
-//             case CompOp::OP_TYPE:
-//                 arg->typeinfo = &typeid(T);
-//                 break;
-//             case CompOp::OP_CLONE:
-//                 arg->any->data = new T{*ptr};
-//                 arg->any->manager = any->manager;
-//                 break;
-//             case CompOp::OP_DESTROY:
-//                 delete ptr;
-//                 break;
-//             case CompOp::OP_TRANSFER:
-//                 arg->any->data = any->data;
-//                 arg->any->manager = any->manager;
-//                 const_cast<CompAny*>(any)->manager = nullptr;
-//                 break;
-//         }
-//     }
-
-// public:
-//     template <typename T> requires (!std::same_as<T, void> && (std::copy_constructible<T> || std::is_rvalue_reference_v<T> || std::is_lvalue_reference_v<T>))
-//     constexpr std::optional<T> comp_any_cast(CompAny& any) {
-//         if (any.manager == &CompAny::compAnyManager<T> || any.type() == typeid(T)) {
-//             CompArg arg;
-//             any.manager(OP_ACCESS, &any, &arg);
-//             return static_cast<T>(*arg.data);
-//         }
-//         return std::nullopt;
-//     }
-
-// private:
-//     void* data;
-//     void(*manager)(CompOp, const CompAny*, CompArg*);
-// };
-
-///////////////////////////////////////////////////////////////////////////////////
-
 class CompPool final {
 friend class Archetype;
 friend class LiteArchetype;
 friend class LateUpgrade;
 public:
     [[nodiscard]] CompPool() noexcept = default;
-    [[nodiscard]] CompPool(const Ent& entity, const std::any& component) noexcept:
+    [[nodiscard]] CompPool(const Ent& entity, std::shared_ptr<IComponent> component) noexcept:
         comps({{entity, component}}) {
     }
 
 private:
-    constexpr auto insert_entity(this auto& self, const Ent& entity, const std::any& component) noexcept -> void {
+    auto insert_entity(this auto& self, const Ent& entity, std::shared_ptr<IComponent> component) noexcept -> void {
         self.comps.emplace(entity, component);
     }
 
@@ -303,7 +141,7 @@ private:
     }
 
 private:
-    std::unordered_map<Ent, std::any> comps;
+    std::unordered_map<Ent, std::shared_ptr<IComponent>> comps;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -323,7 +161,7 @@ friend class View;
 public:
     Archetype() noexcept = default;
 
-    Archetype(const Ent& ent, const std::unordered_map<Type, std::any>& components) noexcept:
+    Archetype(const Ent& ent, const std::unordered_map<Type, std::shared_ptr<IComponent>>& components) noexcept:
         ents({ent}),
         pools(components.size()) {
         for (const auto& pair: components) {
@@ -335,10 +173,10 @@ public:
         }
     }
 
-    Archetype(ArchetypeCreateWith, Archetype& oldArch, const Ent& ent, const std::any& component) noexcept:
+    Archetype(ArchetypeCreateWith, std::shared_ptr<Archetype> oldArch, const Ent& ent, const std::pair<const Type, std::shared_ptr<IComponent>>& component) noexcept:
         ents({ent}),
-        pools(oldArch.pools.size() + 1) {
-        for (const auto& pair: oldArch.pools) {
+        pools(oldArch->pools.size() + 1) {
+        for (const auto& pair: oldArch->pools) {
             pools.emplace(
                 std::piecewise_construct,
                 std::forward_as_tuple(pair.first),
@@ -347,16 +185,16 @@ public:
         }
         pools.emplace(
             std::piecewise_construct,
-            std::forward_as_tuple(component.type().hash_code()),
-            std::forward_as_tuple(ent, component)
+            std::forward_as_tuple(component.first),
+            std::forward_as_tuple(ent, component.second)
         );
-        oldArch.destroy(ent);
+        oldArch->destroy(ent);
     }
 
-    Archetype(ArchetypeCreateWithout, Archetype& oldArch, const Ent& ent, const Type& component_type) noexcept:
+    Archetype(ArchetypeCreateWithout, std::shared_ptr<Archetype> oldArch, const Ent& ent, const Type& component_type) noexcept:
         ents({ent}),
-        pools(oldArch.pools.size() - 1) {
-        for (const auto& pair: oldArch.pools) {
+        pools(oldArch->pools.size() - 1) {
+        for (const auto& pair: oldArch->pools) {
             if (pair.first != component_type) {
                 pools.emplace(
                     std::piecewise_construct,
@@ -365,46 +203,38 @@ public:
                 );
             }
         }
-        oldArch.destroy(ent);
+        oldArch->destroy(ent);
     }
 
 private:
-    constexpr auto new_entity(this auto& self, const Ent& entity, const std::unordered_map<Type, std::any>& components) noexcept -> void {
+    constexpr auto new_entity(this auto& self, const Ent& entity, const std::unordered_map<Type, std::shared_ptr<IComponent>>& components) noexcept -> void {
         self.ents.emplace(entity);
         for (const auto& pair: components) {
             self.pools.at(pair.first).insert_entity(entity, pair.second);
         }
     }
 
-    constexpr auto add_component(this auto& self, const Ent& entity, Archetype& oldArch, const std::any& component) noexcept -> void {
+    auto add_component(this auto& self, const Ent& entity, std::shared_ptr<Archetype> oldArch, const std::pair<const Type, std::shared_ptr<IComponent>>& component) noexcept -> void {
         self.ents.emplace(entity);
-        for (const auto& pair: oldArch.pools) {
+        for (const auto& pair: oldArch->pools) {
             self.pools.at(pair.first).copy_entity(entity, pair.second);
         }
-        self.pools.at(component.type().hash_code()).insert_entity(entity, component);
-        oldArch.destroy(entity);
+        self.pools.at(component.first).insert_entity(entity, component.second);
+        oldArch->destroy(entity);
     }
 
-    constexpr auto remove_component(this auto& self, const Ent& entity, Archetype& oldArch, const Type& component_type) noexcept -> void {
+    auto remove_component(this auto& self, const Ent& entity, std::shared_ptr<Archetype> oldArch, const Type& component_type) noexcept -> void {
         self.ents.emplace(entity);
-        for (const auto& pair: oldArch.pools) {
+        for (const auto& pair: oldArch->pools) {
             if (pair.first != component_type) {
                 self.pools.at(pair.first).copy_entity(entity, pair.second);
             }
         }
-        oldArch.destroy(entity);
+        oldArch->destroy(entity);
     }
 
     [[nodiscard]] constexpr auto get(this auto& self, const Ent& entity, const Type& component_type) noexcept -> auto&& {
         return self.pools.at(component_type).get_entity(entity);
-    }
-
-    [[nodiscard]] constexpr auto getTypes(this const auto& self, const Ent& entity) noexcept -> const std::vector<std::string> {
-        std::vector<std::string> types;
-        for (auto& pool: self.pools) {
-            types.emplace_back(pool.second.comps.at(entity).type().name());
-        }
-        return types;
     }
 
     auto destroy(this auto& self, const Ent& entity) noexcept -> void {
@@ -429,11 +259,11 @@ private:
 private:
     template <typename... Ts>
     [[nodiscard]] constexpr auto getTupleWithEnt(this auto& self, const Ent& entity) noexcept -> std::tuple<const Ent&, Ts&...> {
-        return std::forward_as_tuple(entity, std::any_cast<Ts&>(self.get(entity, typeid(Ts).hash_code()))...);
+        return std::forward_as_tuple(entity, (*std::static_pointer_cast<Ts>(self.get(entity, typeid(Ts).hash_code())))...);
     }
 
 private:
-    [[nodiscard]] constexpr auto isTotalyCompatibleLate(this const auto& self, const std::unordered_map<Type, std::any>& components) noexcept -> bool {
+    [[nodiscard]] constexpr auto isTotalyCompatibleLate(this const auto& self, const std::unordered_map<Type, std::shared_ptr<IComponent>>& components) noexcept -> bool {
         if (components.size() != self.pools.size()) {
             return false;
         }
@@ -445,11 +275,11 @@ private:
         return true;
     }
 
-    [[nodiscard]] constexpr auto isTotalyCompatibleLate(this const auto& self, const Archetype& oldArch, const Type& component_type) noexcept -> bool {
-        if (oldArch.pools.size() + 1 != self.pools.size() || !self.pools.contains(component_type)) {
+    [[nodiscard]] auto isTotalyCompatibleLate(this const auto& self, const std::shared_ptr<Archetype> oldArch, const Type& component_type) noexcept -> bool {
+        if (oldArch->pools.size() + 1 != self.pools.size() || !self.pools.contains(component_type)) {
             return false;
         }
-        for (const auto& pair: oldArch.pools) {
+        for (const auto& pair: oldArch->pools) {
             if (!self.pools.contains(pair.first)) {
                 return false;
             }
@@ -457,11 +287,11 @@ private:
         return true;
     }
 
-    [[nodiscard]] constexpr auto isTotalyCompatibleWithoutLate(this const auto& self, const Archetype& oldArch, const Type& component_type) noexcept -> bool {
-        if (oldArch.pools.size() - 1 != self.pools.size() || self.pools.contains(component_type)) {
+    [[nodiscard]] auto isTotalyCompatibleWithoutLate(this const auto& self, const std::shared_ptr<Archetype> oldArch, const Type& component_type) noexcept -> bool {
+        if (oldArch->pools.size() - 1 != self.pools.size() || self.pools.contains(component_type)) {
             return false;
         }
-        for (const auto& pair: oldArch.pools) {
+        for (const auto& pair: oldArch->pools) {
             if (!self.pools.contains(pair.first) && pair.first != component_type) {
                 return false;
             }
@@ -481,7 +311,7 @@ class View final {
 friend class Registry;
 friend class LiteRegistry;
 private:
-    constexpr View(std::unordered_set<Archetype*>&& newArchs) noexcept:
+    constexpr View(std::unordered_set<std::shared_ptr<Archetype>>&& newArchs) noexcept:
         archs(std::move(newArchs)) {
     }
 
@@ -490,7 +320,7 @@ public:
         if (archs.empty()) {
             return true;
         }
-        for (const auto* arch: archs) {
+        for (const auto& arch: archs) {
             if (arch->size() > 0) {
                 return false;
             }
@@ -500,7 +330,7 @@ public:
 
     [[nodiscard]] constexpr auto size() const noexcept -> std::size_t {
         std::size_t newSize = 0;
-        for (const auto* arch: archs) {
+        for (const auto& arch: archs) {
             newSize += arch->size();
         }
         return newSize;
@@ -518,7 +348,7 @@ private:
         using difference_type = std::ptrdiff_t;
 
     public:
-        ViewIterator(const std::unordered_set<Archetype*>& newArchs, std::unordered_set<Archetype*>::const_iterator newArchsIt) noexcept:
+        ViewIterator(const std::unordered_set<std::shared_ptr<Archetype>>& newArchs, std::unordered_set<std::shared_ptr<Archetype>>::const_iterator newArchsIt) noexcept:
             archsIt(newArchsIt),
             archs(newArchs) {
             if (archsIt != newArchs.end()) {
@@ -554,9 +384,9 @@ private:
         }
 
     private:
-        std::unordered_set<Archetype*>::const_iterator archsIt;
+        std::unordered_set<std::shared_ptr<Archetype>>::const_iterator archsIt;
         std::unordered_set<Ent>::iterator entsIt;
-        const std::unordered_set<Archetype*>& archs;
+        const std::unordered_set<std::shared_ptr<Archetype>>& archs;
     };
 
 public:
@@ -569,7 +399,7 @@ public:
     }
 
 private:
-    const std::unordered_set<Archetype*> archs;
+    const std::unordered_set<std::shared_ptr<Archetype>> archs;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -579,16 +409,10 @@ friend class World;
 friend class LateUpgrade;
 private:
     Registry() noexcept:
-        emptyArch(std::make_unique<Archetype>()) {
+        emptyArch(std::make_shared<Archetype>()) {
     }
 
 private:
-    ~Registry() noexcept {
-        for (auto* arch: archs) {
-            delete arch;
-        }
-    }
-
     [[nodiscard]] constexpr auto getEntToken() noexcept -> Ent {
         Ent ent = lastEnt++;
 
@@ -598,23 +422,23 @@ private:
             entTokens.pop_back();
         }
 
-        entArch.emplace(ent, emptyArch.get());
+        entArch.emplace(ent, emptyArch);
 
         return ent;
     }
 
-    auto newEnt(const Ent& entity, const std::unordered_map<Type, std::any>& components) noexcept -> void {
+    auto newEnt(const Ent& entity, const std::unordered_map<Type, std::shared_ptr<IComponent>>& components) noexcept -> void {
         auto entArchIt = entArch.find(entity);
         if (entArchIt->second->size() > 0) {
             std::println("ZerEngine: Impossible d'inserer une entité deja existante - [{}]", entity);
             return;
         }
 
-        std::unordered_set<Archetype*> compatiblesArchs(archs);
+        std::unordered_set<std::shared_ptr<Archetype>> compatiblesArchs(archs);
         for (const auto& pairAny: components) {
             filterArchsByType(pairAny.first, compatiblesArchs);
         }
-        for (auto* arch: compatiblesArchs) {
+        for (auto& arch: compatiblesArchs) {
             if (arch->isTotalyCompatibleLate(components)) {
                 arch->new_entity(entity, components);
                 entArchIt->second = arch;
@@ -622,7 +446,7 @@ private:
             }
         }
 
-        auto* arch = new Archetype(entity, components);
+        std::shared_ptr<Archetype> arch = std::make_shared<Archetype>(entity, components);
         archs.emplace(arch);
         entArchIt->second = arch;
         for (const auto& pair: arch->pools) {
@@ -630,36 +454,36 @@ private:
         }
     }
 
-    auto add(const Ent& entity, const std::any& component) noexcept -> void {
+    auto add(const Ent& entity, const std::pair<const Type, std::shared_ptr<IComponent>>& component) noexcept -> void {
         auto entArchIt = entArch.find(entity);
         if (entArchIt == entArch.end()) {
-            std::println("ZerEngine: Impossible d'ajouter un composant sur une entité inexistante - [{}]", entity);
+            std::println("ZerEngine - Registry: Impossible d'ajouter un composant sur une entité inexistante - [{}]", entity);
             return;
         }
 
-        if (entArchIt->second->containsType(component.type().hash_code())) {
-            std::println("ZerEngine: Impossible d'ajouter 2 composants identiques  - [{}] - {}", entity, component.type().name());
+        if (entArchIt->second->containsType(component.first)) {
+            std::println("ZerEngine - Registry: Impossible d'ajouter 2 composants identiques  - [{}]", entity);
             return;
         }
 
-        auto* oldArch = entArchIt->second;
+        std::shared_ptr<Archetype> oldArch = entArchIt->second;
 
-        std::unordered_set<Archetype*> compatiblesArchs(archs);
+        std::unordered_set<std::shared_ptr<Archetype>> compatiblesArchs(archs);
         for (const auto& pairPools: oldArch->pools) {
             filterArchsByType(pairPools.first, compatiblesArchs);
         }
-        filterArchsByType(component.type().hash_code(), compatiblesArchs);
-        for (auto* arch: compatiblesArchs) {
-            if (arch->isTotalyCompatibleLate(*oldArch, component.type().hash_code())) {
-                arch->add_component(entity, *oldArch, component);
+        filterArchsByType(component.first, compatiblesArchs);
+        for (auto& arch: compatiblesArchs) {
+            if (arch->isTotalyCompatibleLate(oldArch, component.first)) {
+                arch->add_component(entity, oldArch, component);
                 entArchIt->second = arch;
-                emplaceArchByType(component.type().hash_code(), arch);
+                emplaceArchByType(component.first, arch);
                 removeOldArchIfEmpty(oldArch);
                 return;
             }
         }
 
-        auto* arch = new Archetype(archetypeCreateWith, *oldArch, entity, component);
+        std::shared_ptr<Archetype> arch = std::make_shared<Archetype>(archetypeCreateWith, oldArch, entity, component);
         archs.emplace(arch);
         entArchIt->second = arch;
         for (const auto& pair: arch->pools) {
@@ -680,24 +504,24 @@ private:
             return;
         }
 
-        auto* oldArch = entArchIt->second;
+        std::shared_ptr<Archetype> oldArch = entArchIt->second;
 
-        std::unordered_set<Archetype*> compatiblesArchs(archs);
+        std::unordered_set<std::shared_ptr<Archetype>> compatiblesArchs(archs);
         for (const auto& pairPools: oldArch->pools) {
             if (pairPools.first != component_type) {
                 filterArchsByType(pairPools.first, compatiblesArchs);
             }
         }
-        for (auto* arch: compatiblesArchs) {
-            if (arch->isTotalyCompatibleWithoutLate(*oldArch, component_type)) {
-                arch->remove_component(entity, *oldArch, component_type);
+        for (auto& arch: compatiblesArchs) {
+            if (arch->isTotalyCompatibleWithoutLate(oldArch, component_type)) {
+                arch->remove_component(entity, oldArch, component_type);
                 entArchIt->second = arch;
                 removeOldArchIfEmpty(oldArch);
                 return;
             }
         }
 
-        auto* arch = new Archetype(archetypeCreateWithout, *oldArch, entity, component_type);
+        std::shared_ptr<Archetype> arch = std::make_shared<Archetype>(archetypeCreateWithout, oldArch, entity, component_type);
         archs.emplace(arch);
         entArchIt->second = arch;
         for (const auto& pair: arch->pools) {
@@ -727,10 +551,6 @@ private:
         return self.entArch.at(entity)->get(entity, component_type);
     }
 
-    constexpr auto getTypes(const Ent& entity) const noexcept -> const std::vector<std::string> {
-        return entArch.at(entity)->getTypes(entity);
-    }
-
     auto destroy(const Ent& entity) noexcept -> void {
         auto entArchIt = entArch.find(entity);
         if (entArchIt == entArch.end()) {
@@ -738,26 +558,25 @@ private:
             return;
         }
 
-        auto* arch = entArchIt->second;
+        std::shared_ptr<Archetype> arch = entArchIt->second;
         arch->destroy(entity);
-        removeOldArchIfEmpty(arch);
         entArch.erase(entArchIt);
+        removeOldArchIfEmpty(arch);
         entTokens.push_back(entity);
         detachChildren(entity);
         removeParent(entity);
     }
 
     auto clean() noexcept -> void {
-        for (auto* arch: archs) {
-            delete arch;
-        }
-
-        emptyArch = std::make_unique<Archetype>();
+        emptyArch.reset();
+        emptyArch = std::make_shared<Archetype>();
         lastEnt = 1;
         entTokens.clear();
+        std::println("Clean - Begin: {}", archs.size());
         archs.clear();
         entArch.clear();
         archsByType.clear();
+        std::println("Clean - End");
         parentChildrens.clear();
         childrenParent.clear();
     }
@@ -767,7 +586,7 @@ private:
         if (auto childrenOpt = getChildren(parentEntity)) {
             for (auto childEnt: childrenOpt.value().get()) {
                 if (!has(childEnt, {typeid(IsInactive).hash_code()})) {
-                    add(childEnt, std::make_any<IsInactive>());
+                    add(childEnt, std::pair(typeid(IsInactive).hash_code(), std::make_shared<IsInactive>()));
                 }
                 appendChildrenInactiveRecDown(childEnt);
             }
@@ -779,7 +598,7 @@ private:
             if (auto childrenOpt = getChildren(parentEntity)) {
                 for (auto childEnt: childrenOpt.value().get()) {
                     if (!has(childEnt, {typeid(IsInactive).hash_code()})) {
-                        add(childEnt, std::make_any<IsInactive>());
+                        add(childEnt, std::pair(typeid(IsInactive).hash_code(), std::make_shared<IsInactive>()));
                     }
                     appendChildrenInactiveRecDown(childEnt);
                 }
@@ -796,7 +615,7 @@ private:
         if (auto childrenOpt = getChildren(parentEntity)) {
             for (auto childEnt: childrenOpt.value().get()) {
                 if (!has(childEnt, {typeid(DontDestroyOnLoad).hash_code()})) {
-                    add(childEnt, std::make_any<DontDestroyOnLoad>());
+                    add(childEnt, std::pair(typeid(DontDestroyOnLoad).hash_code(), std::make_shared<DontDestroyOnLoad>()));
                 }
                 appendChildrenDontDestroyOnLoadRecDown(childEnt);
             }
@@ -808,7 +627,7 @@ private:
             if (auto childrenOpt = getChildren(parentEntity)) {
                 for (auto childEnt: childrenOpt.value().get()) {
                     if (!has(childEnt, {typeid(DontDestroyOnLoad).hash_code()})) {
-                        add(childEnt, std::make_any<DontDestroyOnLoad>());
+                        add(childEnt, std::pair(typeid(DontDestroyOnLoad).hash_code(), std::make_shared<DontDestroyOnLoad>()));
                     }
                     appendChildrenDontDestroyOnLoadRecDown(childEnt);
                 }
@@ -921,7 +740,7 @@ private:
 private:
     template <typename... Comps>
     [[nodiscard]] constexpr auto view(const std::initializer_list<Type>& compFilterTypes, const std::initializer_list<Type>& excludeTypes) const noexcept -> const View<Comps...> {
-        std::unordered_set<Archetype*> internalArchs;
+        std::unordered_set<std::shared_ptr<Archetype>> internalArchs;
         if (compFilterTypes.size() > 0) {
             viewAddComp(internalArchs, compFilterTypes);
         } else {
@@ -934,7 +753,7 @@ private:
     }
 
 private:
-    constexpr auto viewAddComp(std::unordered_set<Archetype*>& internalArchs, const std::initializer_list<Type>& compTypes) const noexcept -> void {
+    constexpr auto viewAddComp(std::unordered_set<std::shared_ptr<Archetype>>& internalArchs, const std::initializer_list<Type>& compTypes) const noexcept -> void {
         std::size_t i = 0;
         for (const auto compType: compTypes) {
             if (i == 0) {
@@ -948,13 +767,13 @@ private:
             } else {
                 if (auto archsByTypeIt = archsByType.find(compType); archsByTypeIt != archsByType.end()) {
                     const auto& othArchs = archsByTypeIt->second;
-                    std::vector<Archetype*> toErase;
-                    for (auto* arch: internalArchs) {
+                    std::vector<std::shared_ptr<Archetype>> toErase;
+                    for (auto& arch: internalArchs) {
                         if (!othArchs.contains(arch)) {
                             toErase.emplace_back(arch);
                         }
                     }
-                    for (auto* arch: toErase) {
+                    for (auto& arch: toErase) {
                         internalArchs.erase(arch);
                     }
                 } else {
@@ -965,10 +784,10 @@ private:
         }
     }
 
-    constexpr auto viewWithoutComp(std::unordered_set<Archetype*>& internalArchs, const std::initializer_list<Type>& compTypes) const noexcept -> void {
+    constexpr auto viewWithoutComp(std::unordered_set<std::shared_ptr<Archetype>>& internalArchs, const std::initializer_list<Type>& compTypes) const noexcept -> void {
         for (const auto compType: compTypes) {
             if (auto archsByTypeIt = archsByType.find(compType); archsByTypeIt != archsByType.end()) {
-                for (auto* arch: archsByTypeIt->second) {
+                for (auto& arch: archsByTypeIt->second) {
                     if (internalArchs.contains(arch)) {
                         internalArchs.erase(arch);
                     }
@@ -977,10 +796,10 @@ private:
         }
     }
 
-    auto filterArchsByType(const Type& component_type, std::unordered_set<Archetype*>& compatibleArchs) noexcept -> void {
-        std::unordered_set<Archetype*> newArchs;
+    auto filterArchsByType(const Type& component_type, std::unordered_set<std::shared_ptr<Archetype>>& compatibleArchs) noexcept -> void {
+        std::unordered_set<std::shared_ptr<Archetype>> newArchs;
         if (auto archsByTypeIt = archsByType.find(component_type); archsByTypeIt != archsByType.end()) {
-            for (auto* arch: archsByTypeIt->second) {
+            for (auto& arch: archsByTypeIt->second) {
                 if (compatibleArchs.contains(arch)) {
                     newArchs.emplace(arch);
                 }
@@ -990,24 +809,23 @@ private:
     }
 
 private:
-    auto emplaceArchByType(const Type& component_type, Archetype* arch) noexcept -> void {
+    auto emplaceArchByType(const Type& component_type, std::shared_ptr<Archetype> arch) noexcept -> void {
         if (auto archsByTypeIt = archsByType.find(component_type); archsByTypeIt != archsByType.end()) {
             archsByTypeIt->second.emplace(arch);
         } else {
             archsByType.emplace(
                 std::piecewise_construct,
                 std::forward_as_tuple(component_type),
-                std::forward_as_tuple(std::initializer_list<Archetype*>{arch})
+                std::forward_as_tuple(std::initializer_list<std::shared_ptr<Archetype>>{arch})
             );
         }
     }
 
-    constexpr auto removeOldArchIfEmpty(Archetype* oldArch) noexcept -> void {
-        if (oldArch->size() <= 0 && oldArch != emptyArch.get()) {
+    auto removeOldArchIfEmpty(std::shared_ptr<Archetype> oldArch) noexcept -> void {
+        if (oldArch->size() <= 0 && oldArch != emptyArch) {
             for (const auto& pair: oldArch->pools) {
                 archsByType.at(pair.first).erase(oldArch);
             }
-            delete oldArch;
             archs.erase(oldArch);
         }
     }
@@ -1015,10 +833,10 @@ private:
 private:
     Ent lastEnt = 1;
     std::vector<Ent> entTokens;
-    std::unique_ptr<Archetype> emptyArch;
-    std::unordered_set<Archetype*> archs;
-    std::unordered_map<Ent, Archetype*> entArch;
-    std::unordered_map<Type, std::unordered_set<Archetype*>> archsByType;
+    std::shared_ptr<Archetype> emptyArch;
+    std::unordered_set<std::shared_ptr<Archetype>> archs;
+    std::unordered_map<Ent, std::shared_ptr<Archetype>> entArch;
+    std::unordered_map<Type, std::unordered_set<std::shared_ptr<Archetype>>> archsByType;
     std::unordered_map<Ent, std::unordered_set<Ent>> parentChildrens;
     std::unordered_map<Ent, Ent> childrenParent;
 };
@@ -1033,7 +851,7 @@ private:
     LateUpgrade() = default;
 
 private:
-    auto newEnt(const Ent& ent, const std::initializer_list<std::pair<const Type, std::any>>& newList) noexcept -> Ent {
+    auto newEnt(const Ent& ent, const std::initializer_list<std::pair<const Type, std::shared_ptr<IComponent>>>& newList) noexcept -> Ent {
         const std::unique_lock<std::mutex> lock(mtx);
         addEnts.emplace(
             std::piecewise_construct,
@@ -1043,19 +861,19 @@ private:
         return ent;
     }
 
-    void add(const Registry& reg, const Ent& ent, const std::initializer_list<std::pair<const Type, std::any>>& newList) noexcept {
+    void add(const Registry& reg, const Ent& ent, const std::initializer_list<std::tuple<const Type, const char*, std::shared_ptr<IComponent>>>& newList) noexcept {
         const std::unique_lock<std::mutex> lock(mtx);
         auto addCompsIt = addComps.find(ent);
         if (addCompsIt != addComps.end()) {
-            for (const auto& pair: newList) {
-                if (!addCompsIt->second.contains(pair.first)) {
+            for (const auto& [type, name, component]: newList) {
+                if (!addCompsIt->second.contains(type)) {
                     addCompsIt->second.emplace(
                         std::piecewise_construct,
-                        std::forward_as_tuple(pair.first),
-                        std::forward_as_tuple(pair.second)
+                        std::forward_as_tuple(type),
+                        std::forward_as_tuple(component)
                     );
                 } else {
-                    std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (dans addComp)", pair.second.type().name());
+                    std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (dans addComp)", name);
                 }
             }
         } else {
@@ -1064,19 +882,19 @@ private:
                 std::forward_as_tuple(ent),
                 std::forward_as_tuple()
             ).first;
-            for (const auto& pair: newList) {
-                if (!reg.has(ent, {pair.first})) {
-                    if (!addCompsIt->second.contains(pair.first)) {
+            for (const auto& [type, name, component]: newList) {
+                if (!reg.has(ent, {type})) {
+                    if (!addCompsIt->second.contains(type)) {
                         addCompsIt->second.emplace(
                             std::piecewise_construct,
-                            std::forward_as_tuple(pair.first),
-                            std::forward_as_tuple(pair.second)
+                            std::forward_as_tuple(type),
+                            std::forward_as_tuple(component)
                         );
                     } else {
-                        std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (en double sur l'ajout dans addComp)", pair.second.type().name());
+                        std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (en double sur l'ajout dans addComp)", name);
                     }
                 } else {
-                    std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (sur l'entite)", pair.second.type().name());
+                    std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (sur l'entite)", name);
                 }
             }
         }
@@ -1164,19 +982,6 @@ private:
     }
 
 private:
-    auto getTypes(const Ent& ent) noexcept -> const std::vector<std::string> {
-        const std::unique_lock<std::mutex> lock(mtx);
-        std::vector<std::string> types;
-        for (const auto& pairType: addEnts.at(ent)) {
-            types.emplace_back(pairType.second.type().name());
-        }
-        for (const auto& pairType: addComps.at(ent)) {
-            types.emplace_back(pairType.second.type().name());
-        }
-        return types;
-    }
-
-private:
     void setActiveRec(Registry& reg, const Ent& ent) {
         if (reg.has(ent, {typeid(IsInactive).hash_code()})) {
             reg.remove(ent, typeid(IsInactive).hash_code());
@@ -1190,7 +995,7 @@ private:
 
     void setInactiveRec(Registry& reg, const Ent& ent) {
         if (!reg.has(ent, {typeid(IsInactive).hash_code()})) {
-            reg.add(ent, std::make_any<IsInactive>());
+            reg.add(ent, std::pair(typeid(IsInactive).hash_code(), std::make_shared<IsInactive>()));
             if (auto childrenOpt = reg.getChildren(ent)) {
                 for (auto childEnt: childrenOpt.value().get()) {
                     setInactiveRec(reg, childEnt);
@@ -1201,7 +1006,7 @@ private:
 
     void addDontDetroyOnLoadRec(Registry& reg, const Ent& ent) {
         if (!reg.has(ent, {typeid(DontDestroyOnLoad).hash_code()})) {
-            reg.add(ent, std::make_any<DontDestroyOnLoad>());
+            reg.add(ent, std::pair(typeid(DontDestroyOnLoad).hash_code(), std::make_shared<DontDestroyOnLoad>()));
             if (auto childrenOpt = reg.getChildren(ent)) {
                 for (auto childEnt: childrenOpt.value().get()) {
                     addDontDetroyOnLoadRec(reg, childEnt);
@@ -1224,7 +1029,7 @@ private:
 
         for (const auto& pair: addComps) {
             for (const auto& pairType: pair.second) {
-                reg.add(pair.first, pairType.second);
+                reg.add(pair.first, pairType);
             }
         }
 
@@ -1261,8 +1066,8 @@ private:
             needClean = false;
             std::unordered_map<Ent, std::unordered_set<Ent>> dontDestroyesHierarchies;
             for (auto [dontDestroyEnt]: reg.view({typeid(DontDestroyOnLoad).hash_code()}, {})) {
-                auto* arch = reg.entArch.at(dontDestroyEnt);
-                std::unordered_map<Type, std::any> comps;
+                std::shared_ptr<Archetype> arch = reg.entArch.at(dontDestroyEnt);
+                std::unordered_map<Type, std::shared_ptr<IComponent>> comps;
                 for (auto& pair: arch->pools) {
                     comps.emplace(pair.first, pair.second.comps.at(dontDestroyEnt));
                 }
@@ -1293,18 +1098,17 @@ private:
                 }
                 reg.appendChildren(newEntId, newChildrens);
             }
-
             newSceneFunc({}, world);
         }
     }
 
 private:
     std::mutex mtx;
-    std::unordered_map<Ent, std::unordered_map<Type, std::any>> addEnts;
-    std::unordered_map<Ent, std::unordered_map<Type, std::any>> addComps;
+    std::unordered_map<Ent, std::unordered_map<Type, std::shared_ptr<IComponent>>> addEnts;
+    std::unordered_map<Ent, std::unordered_map<Type, std::shared_ptr<IComponent>>> addComps;
     std::unordered_set<Ent> delEnts;
     std::unordered_map<Ent, std::unordered_set<Type>> delComps;
-    std::unordered_map<Ent, std::unordered_map<Type, std::any>> dontDestroyes;
+    std::unordered_map<Ent, std::unordered_map<Type, std::shared_ptr<IComponent>>> dontDestroyes;
 
     std::unordered_map<Ent, std::unordered_set<Ent>> addParentChildren;
 
@@ -1624,7 +1428,7 @@ private:
     }
 
     constexpr void addLateFixedCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateFixedSystem, World&)>>&& funcs) noexcept {
-        lateFixedSystems.emplace_back(std::move(cond), funcs);
+        lateFixedSystems.emplace_back(std::move(cond), std::move(funcs));
     }
 
     constexpr void addLateUnscaledFixedCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateUnscaledFixedSystem, World&)>>&& funcs) noexcept {
@@ -1885,7 +1689,7 @@ public:
         return reg.exist(ent);
     }
 
-    template <typename T, typename... Ts> requires ((!std::is_reference_v<T> || (!std::is_reference_v<Ts> || ...)) && (!std::is_const_v<T> || (!std::is_const_v<Ts> || ...)))
+    template <typename T, typename... Ts> requires ((std::derived_from<T, IComponent> && (std::derived_from<Ts, IComponent> && ...)) && (!std::is_reference_v<T> || (!std::is_reference_v<Ts> || ...)) && (!std::is_const_v<T> || (!std::is_const_v<Ts> || ...)))
     [[nodiscard("La valeur de retour d'une commande Has doit toujours etre evalue")]] auto hasThisFrame(const Ent& ent) const noexcept -> bool {
         if (!reg.exist(ent)) {
             return false;
@@ -1911,7 +1715,7 @@ public:
         return false;
     }
 
-    template <typename T, typename... Ts> requires ((!std::is_reference_v<T> || (!std::is_reference_v<Ts> || ...)) && (!std::is_const_v<T> || (!std::is_const_v<Ts> || ...)))
+    template <typename T, typename... Ts> requires ((std::derived_from<T, IComponent> && (std::derived_from<Ts, IComponent> && ...)) && (!std::is_reference_v<T> || (!std::is_reference_v<Ts> || ...)) && (!std::is_const_v<T> || (!std::is_const_v<Ts> || ...)))
     [[nodiscard("La valeur de retour d'une commande Has doit toujours etre evalue")]] auto has_components(const Ent& ent) const noexcept -> bool {
         // if (!reg.exist(ent)) {
         //     return false;
@@ -1925,21 +1729,12 @@ public:
         return hasThisFrame<T, Ts...>(ent);
     }
 
-public:
-    [[nodiscard("La valeur de retour d'une commande GetTypes doit toujours etre recupere")]] auto getTypes(const Ent& ent) noexcept -> const std::vector<std::string> {
-        auto types = reg.getTypes(ent);
-        for (const auto& type: lateUpgrade.getTypes(ent)) {
-            types.emplace_back(type);
-        }
-        return types;
-    }
-
 private:
     template <typename T>
     [[nodiscard]] auto internalGet(const Ent& ent) noexcept -> std::optional<std::reference_wrapper<T>> {
         if (reg.has(ent, {typeid(T).hash_code()})) {
-            auto& any = reg.get(ent, typeid(T).hash_code());
-            return std::any_cast<T&>(any);
+            auto& component = reg.get(ent, typeid(T).hash_code());
+            return static_cast<T&>(component);
         }
         return std::nullopt;
     }
@@ -1947,8 +1742,8 @@ private:
     template <typename T>
     [[nodiscard]] auto internalGet(const Ent& ent) const noexcept -> std::optional<const std::reference_wrapper<T>> {
         if (reg.has(ent, {typeid(T).hash_code()})) {
-            auto& any = reg.get(ent, typeid(T).hash_code());
-            return std::any_cast<const T&>(any);
+            auto& component = reg.get(ent, typeid(T).hash_code());
+            return static_cast<const T&>(component);
         }
         return std::nullopt;
     }
@@ -1957,17 +1752,17 @@ private:
     [[nodiscard]] auto internalGetThisFrame(const Ent& ent) noexcept -> std::optional<std::reference_wrapper<T>> {
         if (auto addEntsIt = lateUpgrade.addEnts.find(ent); addEntsIt != lateUpgrade.addEnts.end()) {
             if (auto addEntsTypeIt = addEntsIt->second.find(typeid(T).hash_code()); addEntsTypeIt != addEntsIt->second.end()) {
-                return std::any_cast<T&>(addEntsTypeIt->second);
+                return *static_pointer_cast<T>(addEntsTypeIt->second);
             }
         }
         if (auto addCompsIt = lateUpgrade.addComps.find(ent); addCompsIt != lateUpgrade.addComps.end()) {
             if (auto addCompsTypeIt = addCompsIt->second.find(typeid(T).hash_code()); addCompsTypeIt != addCompsIt->second.end()) {
-                return std::any_cast<T&>(addCompsTypeIt->second);
+                return *static_pointer_cast<T>(addCompsTypeIt->second);
             }
         }
         if (reg.has(ent, {typeid(T).hash_code()})) {
-            auto& any = reg.get(ent, typeid(T).hash_code());
-            return std::any_cast<T&>(any);
+            auto& component = reg.get(ent, typeid(T).hash_code());
+            return *static_pointer_cast<T>(component);
         }
         return std::nullopt;
     }
@@ -1976,23 +1771,23 @@ private:
     [[nodiscard]] auto internalGetThisFrame(const Ent& ent) const noexcept -> std::optional<const std::reference_wrapper<T>> {
         if (auto addEntsIt = lateUpgrade.addEnts.find(ent); addEntsIt != lateUpgrade.addEnts.end()) {
             if (auto addEntsTypeIt = addEntsIt->second.find(typeid(T).hash_code()); addEntsTypeIt != addEntsIt->second.end()) {
-                return std::any_cast<const T&>(addEntsTypeIt->second);
+                return static_cast<const T&>(addEntsTypeIt->second);
             }
         }
         if (auto addCompsIt = lateUpgrade.addComps.find(ent); addCompsIt != lateUpgrade.addComps.end()) {
             if (auto addCompsTypeIt = addCompsIt->second.find(typeid(T).hash_code()); addCompsTypeIt != addCompsIt->second.end()) {
-                return std::any_cast<const T&>(addCompsTypeIt->second);
+                return static_cast<const T&>(addCompsTypeIt->second);
             }
         }
         if (reg.has(ent, {typeid(T).hash_code()})) {
-            auto& any = reg.get(ent, typeid(T).hash_code());
-            return std::any_cast<const T&>(any);
+            auto& component = reg.get(ent, typeid(T).hash_code());
+            return static_cast<const T&>(component);
         }
         return std::nullopt;
     }
 
 public:
-    template <typename T, typename... Ts> requires (IsNotEmptyConcept<T> && IsFinalConcept<T> && IsNotSameConcept<T, Ts...> && !std::is_reference_v<T>)
+    template <typename T, typename... Ts> requires (std::derived_from<T, IComponent> && IsNotEmptyConcept<T> && IsFinalConcept<T> && IsNotSameConcept<T, Ts...> && !std::is_reference_v<T>)
     [[nodiscard("La valeur de retour d'une commande Get doit toujours etre recupere")]] auto getThisFrame(const Ent& ent) noexcept -> std::optional<std::tuple<T&, Ts&...>> {
         if (auto opt = internalGetThisFrame<T>(ent)) {
             if constexpr (sizeof...(Ts) > 0) {
@@ -2007,7 +1802,7 @@ public:
         return std::nullopt;
     }
 
-    template <typename T, typename... Ts> requires (IsNotEmptyConcept<T> && IsFinalConcept<T> && IsNotSameConcept<T, Ts...> && !std::is_reference_v<T>)
+    template <typename T, typename... Ts> requires (std::derived_from<T, IComponent> && IsNotEmptyConcept<T> && IsFinalConcept<T> && IsNotSameConcept<T, Ts...> && !std::is_reference_v<T>)
     [[nodiscard("La valeur de retour d'une commande Get doit toujours etre recupere")]] auto get_components(const Ent& ent) noexcept -> std::optional<std::tuple<T&, Ts&...>> {
         // if (auto opt = internalGet<T>(ent)) {
         //     if constexpr (sizeof...(Ts) > 0) {
@@ -2054,11 +1849,11 @@ public:
         return lateUpgrade.delEnts;
     }
 
-    [[nodiscard]] auto getAddedEnts() const noexcept -> const std::unordered_map<Ent, std::unordered_map<Type, std::any>>& {
+    [[nodiscard]] auto getAddedEnts() const noexcept -> const std::unordered_map<Ent, std::unordered_map<Type, std::shared_ptr<IComponent>>>& {
         return lateUpgrade.addEnts;
     }
 
-    [[nodiscard]] auto getAddedComps() const noexcept -> const std::unordered_map<Ent, std::unordered_map<Type, std::any>>& {
+    [[nodiscard]] auto getAddedComps() const noexcept -> const std::unordered_map<Ent, std::unordered_map<Type, std::shared_ptr<IComponent>>>& {
         return lateUpgrade.addComps;
     }
 
@@ -2070,7 +1865,10 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        !(std::is_reference_v<Comps> || ...) &&
+        (std::derived_from<Comps, IComponent> && ...) &&
+        (std::derived_from<Filters, IComponent> && ...) &&
+        (std::derived_from<Excludes, IComponent> && ...) &&
+        !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
     )
@@ -2082,7 +1880,10 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        !(std::is_reference_v<Comps> || ...) &&
+        (std::derived_from<Comps, IComponent> && ...) &&
+        (std::derived_from<Filters, IComponent> && ...) &&
+        (std::derived_from<Excludes, IComponent> && ...) &&
+        !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
     )
@@ -2094,7 +1895,10 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        !(std::is_reference_v<Comps> || ...) &&
+        (std::derived_from<Comps, IComponent> && ...) &&
+        (std::derived_from<Filters, IComponent> && ...) &&
+        (std::derived_from<Excludes, IComponent> && ...) &&
+        !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
     )
@@ -2106,7 +1910,10 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        !(std::is_reference_v<Comps> || ...) &&
+        (std::derived_from<Comps, IComponent> && ...) &&
+        (std::derived_from<Filters, IComponent> && ...) &&
+        (std::derived_from<Excludes, IComponent> && ...) &&
+        !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
     )
@@ -2118,7 +1925,10 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        !(std::is_reference_v<Comps> || ...) &&
+        (std::derived_from<Comps, IComponent> && ...) &&
+        (std::derived_from<Filters, IComponent> && ...) &&
+        (std::derived_from<Excludes, IComponent> && ...) &&
+        !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
     )
@@ -2130,7 +1940,10 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        !(std::is_reference_v<Comps> || ...) &&
+        (std::derived_from<Comps, IComponent> && ...) &&
+        (std::derived_from<Filters, IComponent> && ...) &&
+        (std::derived_from<Excludes, IComponent> && ...) &&
+        !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
     )
@@ -2142,7 +1955,10 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        !(std::is_reference_v<Comps> || ...) &&
+        (std::derived_from<Comps, IComponent> && ...) &&
+        (std::derived_from<Filters, IComponent> && ...) &&
+        (std::derived_from<Excludes, IComponent> && ...) &&
+        !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
     )
@@ -2154,7 +1970,10 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        !(std::is_reference_v<Comps> || ...) &&
+        (std::derived_from<Comps, IComponent> && ...) &&
+        (std::derived_from<Filters, IComponent> && ...) &&
+        (std::derived_from<Excludes, IComponent> && ...) &&
+        !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
     )
@@ -2162,23 +1981,23 @@ public:
         return reg.view<Comps...>({typeid(Comps).hash_code()..., typeid(Filters).hash_code()...}, {typeid(Excludes).hash_code()...});
     }
 
-    template <typename... Comps> requires ((std::copy_constructible<Comps> && ...) && (IsFinalConcept<Comps> && ...) && IsNotSameConcept<Comps...>)
+    template <typename... Comps> requires (((std::derived_from<Comps, IComponent> && std::copy_constructible<Comps>) && ...) && (IsFinalConcept<Comps> && ...) && IsNotSameConcept<Comps...>)
     auto create_entity(const Comps&... comps) noexcept -> const Ent {
         return lateUpgrade.newEnt(
             reg.getEntToken(),
-            {{typeid(Comps).hash_code(), std::make_any<Comps>(comps)}...}
+            {{typeid(Comps).hash_code(), std::make_shared<Comps>(comps)}...}
         );
     }
 
-    template <typename Comp, typename... Comps> requires ((std::copy_constructible<Comp>) && (IsFinalConcept<Comp>) && IsNotSameConcept<Comps...>)
+    template <typename Comp, typename... Comps> requires ((std::derived_from<Comp, IComponent>) && (std::copy_constructible<Comp>) && (IsFinalConcept<Comp>) && IsNotSameConcept<Comps...>)
     auto add_components(const Ent& ent, const Comp& comp, const Comps&... comps) noexcept -> std::optional<std::tuple<Comp&, Comps&...>> {
         if (reg.exist(ent)) {
             lateUpgrade.add(
                 reg,
                 ent,
-                std::initializer_list<std::pair<const Type, std::any>>{
-                    {typeid(Comp).hash_code(), std::make_any<Comp>(comp)},
-                    {typeid(Comps).hash_code(), std::make_any<Comps>(comps)}...
+                std::initializer_list<std::tuple<const Type, const char*, std::shared_ptr<IComponent>>>{
+                    {typeid(Comp).hash_code(), typeid(Comp).name(), std::make_shared<Comp>(comp)},
+                    {typeid(Comps).hash_code(), typeid(Comps).name(), std::make_shared<Comps>(comps)}...
                 }
             );
         } else {
