@@ -15,7 +15,7 @@ A simple ECS logic core.
 #include <Zerengine.hpp>
 
 // Ressouces declaration.
-struct AppState final {
+class AppState final: public IResource {
     enum class AppStateType: size_t {
         HOME_SCREEN,
         IN_GAME
@@ -29,53 +29,76 @@ struct AppState final {
 };
 
 // Components declaration.
-struct Position final: public IComponent {
+class Position final: public IComponent {
+public:
+    Position(float new_x, float new_y):
+        x(new_x),
+        y(new_y) {
+    }
+
+private:
     float x;
     float y;
 };
 
-struct Velocity final: public IComponent {
+class Velocity final: public IComponent {
+public:
+    Velocity(float new_x, float new_y):
+        x(new_x),
+        y(new_y) {
+    }
+
+private:
     float x;
     float y;
 };
 
-struct Player final: public IComponent {};
+class Player final: public IComponent {};
 
-struct PlayerDash final: public IComponent {
-    float cooldown;
-    float cur_time;
-    float dash_speed;
+class PlayerDash final: public IComponent {
+public:
+    PlayerDash(float new_cooldown, float new_dash_speed):
+        cooldown(new_cooldown),
+        cur_time(0),
+        dash_speed(new_dash_speed) {
+    }
 
+public:
     auto can_stop_dash(float delta) -> bool {
         cur_time += delta;
         return cur_time >= cooldown;
     }
+
+private:
+    float cooldown;
+    float cur_time;
+    float dash_speed;
 };
 
 // Initialization system executed only once at startup.
 auto init_pos(StartSystem, World& world) -> void {
     world.create_entity(
-        Player {},
-        Position {
-            .x = 0.0f,
-            .y = 0.0f,
-        },
-        Velocity {
-            .x = 0.0f,
-            .y = 0.0f,
-        }
+        Player(),
+        Position(
+            /*x:*/ 0.0f,
+            /*y:*/ 0.0f
+        ),
+        Velocity(
+            /*x:*/ 0.0f,
+            /*y:*/ 0.0f
+        )
     );
 
     for (float i = 0; i < 5; i += 1.0f) {
         world.create_entity(
-            Position {
-                .x = i + 10.f,
-                .y = i + 20.f,
-            },
-            Velocity {
-                .x = 10.f,
-                .y = 10.f,
-            }
+            Position(
+                /*x:*/ i + 10.0f,
+                /*y:*/ i + 20.0f
+            ),
+            Velocity(
+                /*x:*/ 10.0f,
+                /*y:*/ 10.0f
+            )
         );
     }
 }
@@ -98,11 +121,10 @@ auto player_action_sys(ThreadedSystem, World& world) -> void {
     for (auto [player_ent]: players) {
         if (/*Dash Button Pressed*/) {
             world.add_components(player_ent,
-                PlayerDash {
-                    .cooldown = 0.5f,
-                    .cur_time = 0.0f,
-                    .dash_speed = 8.0f,
-                }
+                PlayerDash(
+                    /*cooldown:*/ 0.5f,
+                    /*dash_speed:*/ 8.0f
+                )
             );
         }
     }

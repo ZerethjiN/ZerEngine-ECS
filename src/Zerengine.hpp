@@ -1,6 +1,6 @@
 #pragma once
 
-#include <any>
+// #include <any>
 #include <cmath>
 #include <chrono>
 #include <concepts>
@@ -25,7 +25,7 @@
 
 static constexpr inline std::size_t ZERENGINE_VERSION_MAJOR = 24;
 static constexpr inline std::size_t ZERENGINE_VERSION_MINOR = 10;
-static constexpr inline std::size_t ZERENGINE_VERSION_PATCH = 0;
+static constexpr inline std::size_t ZERENGINE_VERSION_PATCH = 1;
 
 using Ent = std::size_t;
 using Type = std::size_t;
@@ -53,6 +53,14 @@ public:
 
 class IsInactive final: public IComponent {};
 class DontDestroyOnLoad final: public IComponent {};
+
+class IResource {
+protected:
+    constexpr IResource() noexcept = default;
+
+public:
+    constexpr ~IResource() noexcept = default;
+};
 
 class ISystem {
 protected:
@@ -108,6 +116,24 @@ concept IsNotEmptyConcept = [] -> bool {
 template <typename T>
 concept IsFinalConcept = [] -> bool {
     static_assert(std::is_final_v<T>, "Impossible d'ajouter un composant non final (class *** final {})");
+    return true;
+}();
+
+template <typename T>
+concept IsComponentConcept = [] -> bool {
+    static_assert(std::is_class_v<T>, "Impossible d'ajouter un Composant qui ne soit pas une Classe");
+    static_assert(std::derived_from<T, IComponent>, "Impossible d'ajouter un Composant qui n'implemente pas IComponent");
+    static_assert(std::is_final_v<T>, "Impossible d'ajouter un Composant qui ne soit pas Final");
+    static_assert(std::copy_constructible<T>, "Impossible d'ajouter un Composant qui ne soit pas Copiable");
+    return true;
+}();
+
+template <typename T>
+concept IsResourceConcept = [] -> bool {
+    static_assert(std::is_class_v<T>, "Impossible d'ajouter une Ressource qui ne soit pas une Classe");
+    static_assert(std::derived_from<T, IResource>, "Impossible d'ajouter une Ressource qui n'implemente pas IComponent");
+    static_assert(std::is_final_v<T>, "Impossible d'ajouter une Ressource qui ne soit pas Final");
+    static_assert(std::copy_constructible<T>, "Impossible d'ajouter une Ressource qui ne soit pas Copiable");
     return true;
 }();
 
@@ -1127,8 +1153,8 @@ class TypeMap final {
 friend class World;
 friend class ZerEngine;
 private:
-    constexpr void emplace(const Type&& type, const std::any&& any) noexcept {
-        typeMap.emplace(std::move(type), std::move(any));
+    constexpr void emplace(const Type&& type, const std::shared_ptr<IResource>&& resource) noexcept {
+        typeMap.emplace(std::move(type), std::move(resource));
     }
 
     [[nodiscard]] constexpr auto get(this auto& self, const Type& type) noexcept -> auto& {
@@ -1140,7 +1166,7 @@ private:
     }
 
 private:
-    std::unordered_map<std::size_t, std::any> typeMap;
+    std::unordered_map<std::size_t, std::shared_ptr<IResource>> typeMap;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -1578,7 +1604,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////////
 
-class Time final {
+class Time final: public IResource {
 friend class ZerEngine;
 public:
     Time(float newFixedTimeStep = 0.02f) noexcept:
@@ -1689,7 +1715,7 @@ public:
         return reg.exist(ent);
     }
 
-    template <typename T, typename... Ts> requires ((std::derived_from<T, IComponent> && (std::derived_from<Ts, IComponent> && ...)) && (!std::is_reference_v<T> || (!std::is_reference_v<Ts> || ...)) && (!std::is_const_v<T> || (!std::is_const_v<Ts> || ...)))
+    template <typename T, typename... Ts> requires ((IsComponentConcept<T> && (IsComponentConcept<Ts> && ...)) && (!std::is_reference_v<T> || (!std::is_reference_v<Ts> || ...)) && (!std::is_const_v<T> || (!std::is_const_v<Ts> || ...)))
     [[nodiscard("La valeur de retour d'une commande Has doit toujours etre evalue")]] auto hasThisFrame(const Ent& ent) const noexcept -> bool {
         if (!reg.exist(ent)) {
             return false;
@@ -1715,7 +1741,7 @@ public:
         return false;
     }
 
-    template <typename T, typename... Ts> requires ((std::derived_from<T, IComponent> && (std::derived_from<Ts, IComponent> && ...)) && (!std::is_reference_v<T> || (!std::is_reference_v<Ts> || ...)) && (!std::is_const_v<T> || (!std::is_const_v<Ts> || ...)))
+    template <typename T, typename... Ts> requires ((IsComponentConcept<T> && (IsComponentConcept<Ts> && ...)) && (!std::is_reference_v<T> || (!std::is_reference_v<Ts> || ...)) && (!std::is_const_v<T> || (!std::is_const_v<Ts> || ...)))
     [[nodiscard("La valeur de retour d'une commande Has doit toujours etre evalue")]] auto has_components(const Ent& ent) const noexcept -> bool {
         // if (!reg.exist(ent)) {
         //     return false;
@@ -1752,17 +1778,17 @@ private:
     [[nodiscard]] auto internalGetThisFrame(const Ent& ent) noexcept -> std::optional<std::reference_wrapper<T>> {
         if (auto addEntsIt = lateUpgrade.addEnts.find(ent); addEntsIt != lateUpgrade.addEnts.end()) {
             if (auto addEntsTypeIt = addEntsIt->second.find(typeid(T).hash_code()); addEntsTypeIt != addEntsIt->second.end()) {
-                return *static_pointer_cast<T>(addEntsTypeIt->second);
+                return *std::static_pointer_cast<T>(addEntsTypeIt->second);
             }
         }
         if (auto addCompsIt = lateUpgrade.addComps.find(ent); addCompsIt != lateUpgrade.addComps.end()) {
             if (auto addCompsTypeIt = addCompsIt->second.find(typeid(T).hash_code()); addCompsTypeIt != addCompsIt->second.end()) {
-                return *static_pointer_cast<T>(addCompsTypeIt->second);
+                return *std::static_pointer_cast<T>(addCompsTypeIt->second);
             }
         }
         if (reg.has(ent, {typeid(T).hash_code()})) {
             auto& component = reg.get(ent, typeid(T).hash_code());
-            return *static_pointer_cast<T>(component);
+            return *std::static_pointer_cast<T>(component);
         }
         return std::nullopt;
     }
@@ -1787,7 +1813,7 @@ private:
     }
 
 public:
-    template <typename T, typename... Ts> requires (std::derived_from<T, IComponent> && IsNotEmptyConcept<T> && IsFinalConcept<T> && IsNotSameConcept<T, Ts...> && !std::is_reference_v<T>)
+    template <typename T, typename... Ts> requires (IsComponentConcept<T> && IsNotEmptyConcept<T> && IsNotSameConcept<T, Ts...> && !std::is_reference_v<T>)
     [[nodiscard("La valeur de retour d'une commande Get doit toujours etre recupere")]] auto getThisFrame(const Ent& ent) noexcept -> std::optional<std::tuple<T&, Ts&...>> {
         if (auto opt = internalGetThisFrame<T>(ent)) {
             if constexpr (sizeof...(Ts) > 0) {
@@ -1802,7 +1828,7 @@ public:
         return std::nullopt;
     }
 
-    template <typename T, typename... Ts> requires (std::derived_from<T, IComponent> && IsNotEmptyConcept<T> && IsFinalConcept<T> && IsNotSameConcept<T, Ts...> && !std::is_reference_v<T>)
+    template <typename T, typename... Ts> requires (IsComponentConcept<T> && IsNotEmptyConcept<T> && IsNotSameConcept<T, Ts...> && !std::is_reference_v<T>)
     [[nodiscard("La valeur de retour d'une commande Get doit toujours etre recupere")]] auto get_components(const Ent& ent) noexcept -> std::optional<std::tuple<T&, Ts&...>> {
         // if (auto opt = internalGet<T>(ent)) {
         //     if constexpr (sizeof...(Ts) > 0) {
@@ -1840,9 +1866,9 @@ public:
         return parentEnt;
     }
 
-    template <typename... Ts> requires ((sizeof...(Ts) > 0) && (!std::is_reference_v<Ts> || ...))
+    template <typename... Ts> requires ((sizeof...(Ts) > 0) && (IsResourceConcept<Ts> && ...) && (!std::is_reference_v<Ts> || ...))
     [[nodiscard("La valeur de retour d'une commande Resource doit toujours etre recupere")]] auto resource(this auto& self) noexcept -> std::tuple<Ts&...> {
-        return std::forward_as_tuple(std::any_cast<Ts&>(self.res.get(typeid(Ts).hash_code()))...);
+        return std::forward_as_tuple(*std::static_pointer_cast<Ts>(self.res.get(typeid(Ts).hash_code()))...);
     }
 
     [[nodiscard]] auto getDestroyedEnts() const noexcept -> const std::unordered_set<Ent>& {
@@ -1865,9 +1891,9 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        (std::derived_from<Comps, IComponent> && ...) &&
-        (std::derived_from<Filters, IComponent> && ...) &&
-        (std::derived_from<Excludes, IComponent> && ...) &&
+        (IsComponentConcept<Comps> && ...) &&
+        (IsComponentConcept<Filters> && ...) &&
+        (IsComponentConcept<Excludes> && ...) &&
         !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
@@ -1880,9 +1906,9 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        (std::derived_from<Comps, IComponent> && ...) &&
-        (std::derived_from<Filters, IComponent> && ...) &&
-        (std::derived_from<Excludes, IComponent> && ...) &&
+        (IsComponentConcept<Comps> && ...) &&
+        (IsComponentConcept<Filters> && ...) &&
+        (IsComponentConcept<Excludes> && ...) &&
         !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
@@ -1895,9 +1921,9 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        (std::derived_from<Comps, IComponent> && ...) &&
-        (std::derived_from<Filters, IComponent> && ...) &&
-        (std::derived_from<Excludes, IComponent> && ...) &&
+        (IsComponentConcept<Comps> && ...) &&
+        (IsComponentConcept<Filters> && ...) &&
+        (IsComponentConcept<Excludes> && ...) &&
         !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
@@ -1910,9 +1936,9 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        (std::derived_from<Comps, IComponent> && ...) &&
-        (std::derived_from<Filters, IComponent> && ...) &&
-        (std::derived_from<Excludes, IComponent> && ...) &&
+        (IsComponentConcept<Comps> && ...) &&
+        (IsComponentConcept<Filters> && ...) &&
+        (IsComponentConcept<Excludes> && ...) &&
         !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
@@ -1925,9 +1951,9 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        (std::derived_from<Comps, IComponent> && ...) &&
-        (std::derived_from<Filters, IComponent> && ...) &&
-        (std::derived_from<Excludes, IComponent> && ...) &&
+        (IsComponentConcept<Comps> && ...) &&
+        (IsComponentConcept<Filters> && ...) &&
+        (IsComponentConcept<Excludes> && ...) &&
         !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
@@ -1940,9 +1966,9 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        (std::derived_from<Comps, IComponent> && ...) &&
-        (std::derived_from<Filters, IComponent> && ...) &&
-        (std::derived_from<Excludes, IComponent> && ...) &&
+        (IsComponentConcept<Comps> && ...) &&
+        (IsComponentConcept<Filters> && ...) &&
+        (IsComponentConcept<Excludes> && ...) &&
         !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
@@ -1955,9 +1981,9 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        (std::derived_from<Comps, IComponent> && ...) &&
-        (std::derived_from<Filters, IComponent> && ...) &&
-        (std::derived_from<Excludes, IComponent> && ...) &&
+        (IsComponentConcept<Comps> && ...) &&
+        (IsComponentConcept<Filters> && ...) &&
+        (IsComponentConcept<Excludes> && ...) &&
         !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
@@ -1970,9 +1996,9 @@ public:
     requires (
         (IsNotEmptyConcept<Comps> && ...) &&
         IsNotSameConcept<Comps..., Filters..., Excludes...> &&
-        (std::derived_from<Comps, IComponent> && ...) &&
-        (std::derived_from<Filters, IComponent> && ...) &&
-        (std::derived_from<Excludes, IComponent> && ...) &&
+        (IsComponentConcept<Comps> && ...) &&
+        (IsComponentConcept<Filters> && ...) &&
+        (IsComponentConcept<Excludes> && ...) &&
         !((std::is_reference_v<Comps>) || ...) &&
         !((std::is_const_v<Filters> || std::is_reference_v<Filters>) || ...) &&
         !((std::is_const_v<Excludes> || std::is_reference_v<Excludes>) || ...)
@@ -1981,7 +2007,7 @@ public:
         return reg.view<Comps...>({typeid(Comps).hash_code()..., typeid(Filters).hash_code()...}, {typeid(Excludes).hash_code()...});
     }
 
-    template <typename... Comps> requires (((std::derived_from<Comps, IComponent> && std::copy_constructible<Comps>) && ...) && (IsFinalConcept<Comps> && ...) && IsNotSameConcept<Comps...>)
+    template <typename... Comps> requires ((IsComponentConcept<Comps> && ...) && IsNotSameConcept<Comps...>)
     auto create_entity(const Comps&... comps) noexcept -> const Ent {
         return lateUpgrade.newEnt(
             reg.getEntToken(),
@@ -1989,7 +2015,7 @@ public:
         );
     }
 
-    template <typename Comp, typename... Comps> requires ((std::derived_from<Comp, IComponent>) && (std::copy_constructible<Comp>) && (IsFinalConcept<Comp>) && IsNotSameConcept<Comps...>)
+    template <typename Comp, typename... Comps> requires (IsComponentConcept<Comp> && IsNotSameConcept<Comps...>)
     auto add_components(const Ent& ent, const Comp& comp, const Comps&... comps) noexcept -> std::optional<std::tuple<Comp&, Comps&...>> {
         if (reg.exist(ent)) {
             lateUpgrade.add(
@@ -2075,7 +2101,7 @@ private:
 class ZerEngine final {
 public:
     ZerEngine() noexcept {
-        world.res.emplace(typeid(Time).hash_code(), std::make_any<Time>(0.02f));
+        world.res.emplace(typeid(Time).hash_code(), std::make_shared<Time>(0.02f));
     }
 
     [[nodiscard]] constexpr auto use_multithreading(bool newVal) noexcept -> ZerEngine& {
@@ -2089,9 +2115,9 @@ public:
         return *this;
     }
 
-    template <typename T, typename... Args> requires ((std::copy_constructible<T>) && (IsFinalConcept<T>))
+    template <typename T, typename... Args> requires (IsResourceConcept<T>)
     [[nodiscard]] auto add_resource(Args&&... args) noexcept -> ZerEngine& {
-        world.res.emplace(typeid(T).hash_code(), std::make_any<T>(std::forward<Args>(args)...));
+        world.res.emplace(typeid(T).hash_code(), std::make_shared<T>(std::forward<Args>(args)...));
         return *this;
     }
 
