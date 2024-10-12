@@ -16,15 +16,18 @@ A simple ECS logic core.
 
 // Ressouces declaration.
 class AppState final: public IResource {
+public:
     enum class AppStateType: size_t {
         HOME_SCREEN,
         IN_GAME
     };
 
+public:
     AppState(AppStateType new_cur_app_state):
         cur_app_state(new_cur_app_state) {
     }
 
+public:
     AppStateType cur_app_state;
 };
 

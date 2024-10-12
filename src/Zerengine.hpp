@@ -1,6 +1,5 @@
 #pragma once
 
-// #include <any>
 #include <cmath>
 #include <chrono>
 #include <concepts>
@@ -25,7 +24,7 @@
 
 static constexpr inline std::size_t ZERENGINE_VERSION_MAJOR = 24;
 static constexpr inline std::size_t ZERENGINE_VERSION_MINOR = 10;
-static constexpr inline std::size_t ZERENGINE_VERSION_PATCH = 1;
+static constexpr inline std::size_t ZERENGINE_VERSION_PATCH = 2;
 
 using Ent = std::size_t;
 using Type = std::size_t;
@@ -140,30 +139,35 @@ concept IsResourceConcept = [] -> bool {
 ///////////////////////////////////////////////////////////////////////////////////
 
 class CompPool final {
-friend class Archetype;
-friend class LiteArchetype;
+// friend class Archetype;
 friend class LateUpgrade;
 public:
     [[nodiscard]] CompPool() noexcept = default;
-    [[nodiscard]] CompPool(const Ent& entity, std::shared_ptr<IComponent> component) noexcept:
-        comps({{entity, component}}) {
+    [[nodiscard]] CompPool(const Ent& entity, std::shared_ptr<IComponent>&& component) noexcept:
+        comps({{entity, std::move(component)}}) {
     }
 
-private:
-    auto insert_entity(this auto& self, const Ent& entity, std::shared_ptr<IComponent> component) noexcept -> void {
-        self.comps.emplace(entity, component);
+public:
+    constexpr auto insert_entity(this CompPool& self, const Ent& entity, std::shared_ptr<IComponent>&& component) noexcept -> void {
+        self.comps.emplace(entity, std::move(component));
     }
 
-    [[nodiscard]] constexpr auto get_entity(this auto& self, const Ent& entity) noexcept -> auto& {
+    [[nodiscard]] constexpr auto get_entity(this CompPool& self, const Ent& entity) noexcept -> std::shared_ptr<IComponent>& {
         return self.comps.at(entity);
     }
 
-    constexpr auto copy_entity(this auto& self, const Ent& entity, const CompPool& oth) noexcept -> void {
-        self.comps.emplace(entity, oth.comps.at(entity));
+    [[nodiscard]] constexpr auto get_entity(this const CompPool& self, const Ent& entity) noexcept -> const std::shared_ptr<IComponent>& {
+        return self.comps.at(entity);
     }
 
-    constexpr auto remove_entity(this auto& self, const Ent& entity) noexcept -> void {
+    [[nodiscard]] constexpr auto contains_entity(this const CompPool& self, const Ent& entity) noexcept -> bool {
+        return self.comps.contains(entity);
+    }
+
+    [[nodiscard]] auto remove_entity(this CompPool& self, const Ent& entity) noexcept -> std::shared_ptr<IComponent> {
+        auto component = self.comps.at(entity);
         self.comps.erase(entity);
+        return component;
     }
 
 private:
@@ -187,45 +191,45 @@ friend class View;
 public:
     Archetype() noexcept = default;
 
-    Archetype(const Ent& ent, const std::unordered_map<Type, std::shared_ptr<IComponent>>& components) noexcept:
+    Archetype(const Ent& ent, std::unordered_map<Type, std::shared_ptr<IComponent>>&& components) noexcept:
         ents({ent}),
         pools(components.size()) {
-        for (const auto& pair: components) {
+        for (auto&& [type, component]: components) {
             pools.emplace(
                 std::piecewise_construct,
-                std::forward_as_tuple(pair.first),
-                std::forward_as_tuple(ent, pair.second)
+                std::forward_as_tuple(type),
+                std::forward_as_tuple(ent, std::move(component))
             );
         }
     }
 
-    Archetype(ArchetypeCreateWith, std::shared_ptr<Archetype> oldArch, const Ent& ent, const std::pair<const Type, std::shared_ptr<IComponent>>& component) noexcept:
+    Archetype(ArchetypeCreateWith, std::shared_ptr<Archetype>& oldArch, const Ent& ent, std::pair<Type, std::shared_ptr<IComponent>>&& component) noexcept:
         ents({ent}),
         pools(oldArch->pools.size() + 1) {
-        for (const auto& pair: oldArch->pools) {
+        for (auto&& [old_type, old_component]: oldArch->pools) {
             pools.emplace(
                 std::piecewise_construct,
-                std::forward_as_tuple(pair.first),
-                std::forward_as_tuple(ent, pair.second.comps.at(ent))
+                std::forward_as_tuple(old_type),
+                std::forward_as_tuple(ent, std::move(old_component.remove_entity(ent)))
             );
         }
         pools.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(component.first),
-            std::forward_as_tuple(ent, component.second)
+            std::forward_as_tuple(ent, std::move(component.second))
         );
         oldArch->destroy(ent);
     }
 
-    Archetype(ArchetypeCreateWithout, std::shared_ptr<Archetype> oldArch, const Ent& ent, const Type& component_type) noexcept:
+    Archetype(ArchetypeCreateWithout, std::shared_ptr<Archetype>& oldArch, const Ent& ent, const Type& component_type) noexcept:
         ents({ent}),
         pools(oldArch->pools.size() - 1) {
-        for (const auto& pair: oldArch->pools) {
-            if (pair.first != component_type) {
+        for (auto&& [old_type, old_component]: oldArch->pools) {
+            if (old_type != component_type) {
                 pools.emplace(
                     std::piecewise_construct,
-                    std::forward_as_tuple(pair.first),
-                    std::forward_as_tuple(ent, pair.second.comps.at(ent))
+                    std::forward_as_tuple(old_type),
+                    std::forward_as_tuple(ent, std::move(old_component.remove_entity(ent)))
                 );
             }
         }
@@ -233,40 +237,46 @@ public:
     }
 
 private:
-    constexpr auto new_entity(this auto& self, const Ent& entity, const std::unordered_map<Type, std::shared_ptr<IComponent>>& components) noexcept -> void {
+    constexpr auto new_entity(this auto& self, const Ent& entity, std::unordered_map<Type, std::shared_ptr<IComponent>>&& components) noexcept -> void {
         self.ents.emplace(entity);
-        for (const auto& pair: components) {
-            self.pools.at(pair.first).insert_entity(entity, pair.second);
+        for (auto&& [type, component]: components) {
+            self.pools.at(type).insert_entity(entity, std::move(component));
         }
     }
 
-    auto add_component(this auto& self, const Ent& entity, std::shared_ptr<Archetype> oldArch, const std::pair<const Type, std::shared_ptr<IComponent>>& component) noexcept -> void {
+    auto add_component(this auto& self, const Ent& entity, std::shared_ptr<Archetype>& oldArch, std::pair<Type, std::shared_ptr<IComponent>>&& component) noexcept -> void {
         self.ents.emplace(entity);
-        for (const auto& pair: oldArch->pools) {
-            self.pools.at(pair.first).copy_entity(entity, pair.second);
+        for (auto& pair: oldArch->pools) {
+            self.pools.at(pair.first).insert_entity(entity, std::move(pair.second.remove_entity(entity)));
         }
-        self.pools.at(component.first).insert_entity(entity, component.second);
+        self.pools.at(component.first).insert_entity(entity, std::move(component.second));
         oldArch->destroy(entity);
     }
 
-    auto remove_component(this auto& self, const Ent& entity, std::shared_ptr<Archetype> oldArch, const Type& component_type) noexcept -> void {
+    auto remove_component(this auto& self, const Ent& entity, std::shared_ptr<Archetype>& oldArch, const Type& component_type) noexcept -> void {
         self.ents.emplace(entity);
-        for (const auto& pair: oldArch->pools) {
+        for (auto& pair: oldArch->pools) {
             if (pair.first != component_type) {
-                self.pools.at(pair.first).copy_entity(entity, pair.second);
+                self.pools.at(pair.first).insert_entity(entity, std::move(pair.second.remove_entity(entity)));
             }
         }
         oldArch->destroy(entity);
     }
 
-    [[nodiscard]] constexpr auto get(this auto& self, const Ent& entity, const Type& component_type) noexcept -> auto&& {
+    [[nodiscard]] constexpr auto get(this Archetype& self, const Ent& entity, const Type& component_type) noexcept -> std::shared_ptr<IComponent>& {
+        return self.pools.at(component_type).get_entity(entity);
+    }
+
+    [[nodiscard]] constexpr auto get(this const Archetype& self, const Ent& entity, const Type& component_type) noexcept -> const std::shared_ptr<IComponent>& {
         return self.pools.at(component_type).get_entity(entity);
     }
 
     auto destroy(this auto& self, const Ent& entity) noexcept -> void {
         self.ents.erase(entity);
-        for (auto& pool: self.pools) {
-            pool.second.remove_entity(entity);
+        for (auto& [_, comp_pool]: self.pools) {
+            if (comp_pool.contains_entity(entity)) {
+                static_cast<void>(comp_pool.remove_entity(entity));
+            }
         }
     }
 
@@ -285,7 +295,7 @@ private:
 private:
     template <typename... Ts>
     [[nodiscard]] constexpr auto getTupleWithEnt(this auto& self, const Ent& entity) noexcept -> std::tuple<const Ent&, Ts&...> {
-        return std::forward_as_tuple(entity, (*std::static_pointer_cast<Ts>(self.get(entity, typeid(Ts).hash_code())))...);
+        return std::forward_as_tuple(entity, (*static_cast<Ts*>(self.get(entity, typeid(Ts).hash_code()).get()))...);
     }
 
 private:
@@ -301,7 +311,7 @@ private:
         return true;
     }
 
-    [[nodiscard]] auto isTotalyCompatibleLate(this const auto& self, const std::shared_ptr<Archetype> oldArch, const Type& component_type) noexcept -> bool {
+    [[nodiscard]] auto isTotalyCompatibleLate(this const auto& self, const std::shared_ptr<Archetype>& oldArch, const Type& component_type) noexcept -> bool {
         if (oldArch->pools.size() + 1 != self.pools.size() || !self.pools.contains(component_type)) {
             return false;
         }
@@ -313,7 +323,7 @@ private:
         return true;
     }
 
-    [[nodiscard]] auto isTotalyCompatibleWithoutLate(this const auto& self, const std::shared_ptr<Archetype> oldArch, const Type& component_type) noexcept -> bool {
+    [[nodiscard]] auto isTotalyCompatibleWithoutLate(this const auto& self, const std::shared_ptr<Archetype>& oldArch, const Type& component_type) noexcept -> bool {
         if (oldArch->pools.size() - 1 != self.pools.size() || self.pools.contains(component_type)) {
             return false;
         }
@@ -453,7 +463,7 @@ private:
         return ent;
     }
 
-    auto newEnt(const Ent& entity, const std::unordered_map<Type, std::shared_ptr<IComponent>>& components) noexcept -> void {
+    auto newEnt(const Ent& entity, std::unordered_map<Type, std::shared_ptr<IComponent>>&& components) noexcept -> void {
         auto entArchIt = entArch.find(entity);
         if (entArchIt->second->size() > 0) {
             std::println("ZerEngine: Impossible d'inserer une entité deja existante - [{}]", entity);
@@ -461,18 +471,18 @@ private:
         }
 
         std::unordered_set<std::shared_ptr<Archetype>> compatiblesArchs(archs);
-        for (const auto& pairAny: components) {
-            filterArchsByType(pairAny.first, compatiblesArchs);
+        for (const auto& [type, _]: components) {
+            filterArchsByType(type, compatiblesArchs);
         }
         for (auto& arch: compatiblesArchs) {
             if (arch->isTotalyCompatibleLate(components)) {
-                arch->new_entity(entity, components);
+                arch->new_entity(entity, std::move(components));
                 entArchIt->second = arch;
                 return;
             }
         }
 
-        std::shared_ptr<Archetype> arch = std::make_shared<Archetype>(entity, components);
+        std::shared_ptr<Archetype> arch = std::make_shared<Archetype>(entity, std::move(components));
         archs.emplace(arch);
         entArchIt->second = arch;
         for (const auto& pair: arch->pools) {
@@ -480,7 +490,7 @@ private:
         }
     }
 
-    auto add(const Ent& entity, const std::pair<const Type, std::shared_ptr<IComponent>>& component) noexcept -> void {
+    auto add(const Ent& entity, std::pair<Type, std::shared_ptr<IComponent>>&& component) noexcept -> void {
         auto entArchIt = entArch.find(entity);
         if (entArchIt == entArch.end()) {
             std::println("ZerEngine - Registry: Impossible d'ajouter un composant sur une entité inexistante - [{}]", entity);
@@ -501,7 +511,7 @@ private:
         filterArchsByType(component.first, compatiblesArchs);
         for (auto& arch: compatiblesArchs) {
             if (arch->isTotalyCompatibleLate(oldArch, component.first)) {
-                arch->add_component(entity, oldArch, component);
+                arch->add_component(entity, oldArch, std::move(component));
                 entArchIt->second = arch;
                 emplaceArchByType(component.first, arch);
                 removeOldArchIfEmpty(oldArch);
@@ -509,7 +519,7 @@ private:
             }
         }
 
-        std::shared_ptr<Archetype> arch = std::make_shared<Archetype>(archetypeCreateWith, oldArch, entity, component);
+        std::shared_ptr<Archetype> arch = std::make_shared<Archetype>(archetypeCreateWith, oldArch, entity, std::move(component));
         archs.emplace(arch);
         entArchIt->second = arch;
         for (const auto& pair: arch->pools) {
@@ -573,7 +583,7 @@ private:
         return true;
     }
 
-    [[nodiscard]] constexpr auto get(this auto& self, const Ent& entity, const Type& component_type) noexcept -> auto&& {
+    [[nodiscard]] constexpr auto get(this auto& self, const Ent& entity, const Type& component_type) noexcept -> auto& {
         return self.entArch.at(entity)->get(entity, component_type);
     }
 
@@ -835,7 +845,7 @@ private:
     }
 
 private:
-    auto emplaceArchByType(const Type& component_type, std::shared_ptr<Archetype> arch) noexcept -> void {
+    auto emplaceArchByType(const Type& component_type, const std::shared_ptr<Archetype>& arch) noexcept -> void {
         if (auto archsByTypeIt = archsByType.find(component_type); archsByTypeIt != archsByType.end()) {
             archsByTypeIt->second.emplace(arch);
         } else {
@@ -847,7 +857,7 @@ private:
         }
     }
 
-    auto removeOldArchIfEmpty(std::shared_ptr<Archetype> oldArch) noexcept -> void {
+    auto removeOldArchIfEmpty(const std::shared_ptr<Archetype>& oldArch) noexcept -> void {
         if (oldArch->size() <= 0 && oldArch != emptyArch) {
             for (const auto& pair: oldArch->pools) {
                 archsByType.at(pair.first).erase(oldArch);
@@ -877,26 +887,26 @@ private:
     LateUpgrade() = default;
 
 private:
-    auto newEnt(const Ent& ent, const std::initializer_list<std::pair<const Type, std::shared_ptr<IComponent>>>& newList) noexcept -> Ent {
+    auto newEnt(const Ent& ent, std::initializer_list<std::pair<const Type, std::shared_ptr<IComponent>>>&& newList) noexcept -> Ent {
         const std::unique_lock<std::mutex> lock(mtx);
         addEnts.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(ent),
-            std::forward_as_tuple(newList)
+            std::forward_as_tuple(std::move(newList))
         );
         return ent;
     }
 
-    void add(const Registry& reg, const Ent& ent, const std::initializer_list<std::tuple<const Type, const char*, std::shared_ptr<IComponent>>>& newList) noexcept {
+    void add(const Registry& reg, const Ent& ent, std::initializer_list<std::tuple<const Type, const char*, std::shared_ptr<IComponent>>>&& newList) noexcept {
         const std::unique_lock<std::mutex> lock(mtx);
         auto addCompsIt = addComps.find(ent);
         if (addCompsIt != addComps.end()) {
-            for (const auto& [type, name, component]: newList) {
+            for (auto&& [type, name, component]: newList) {
                 if (!addCompsIt->second.contains(type)) {
                     addCompsIt->second.emplace(
                         std::piecewise_construct,
-                        std::forward_as_tuple(type),
-                        std::forward_as_tuple(component)
+                        std::forward_as_tuple(std::move(type)),
+                        std::forward_as_tuple(std::move(component))
                     );
                 } else {
                     std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (dans addComp)", name);
@@ -908,13 +918,13 @@ private:
                 std::forward_as_tuple(ent),
                 std::forward_as_tuple()
             ).first;
-            for (const auto& [type, name, component]: newList) {
+            for (auto&& [type, name, component]: newList) {
                 if (!reg.has(ent, {type})) {
                     if (!addCompsIt->second.contains(type)) {
                         addCompsIt->second.emplace(
                             std::piecewise_construct,
-                            std::forward_as_tuple(type),
-                            std::forward_as_tuple(component)
+                            std::forward_as_tuple(std::move(type)),
+                            std::forward_as_tuple(std::move(component))
                         );
                     } else {
                         std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (en double sur l'ajout dans addComp)", name);
@@ -1043,9 +1053,10 @@ private:
 
 private:
     void upgrade(World& world, Registry& reg) noexcept {
-        for (const auto& pair: addEnts) {
-            reg.newEnt(pair.first, pair.second);
+        for (auto&& [entity, components]: addEnts) {
+            reg.newEnt(entity, std::move(components));
         }
+        addEnts.clear();
 
         for (const auto& pair: delComps) {
             for (const auto& type: pair.second) {
@@ -1053,11 +1064,12 @@ private:
             }
         }
 
-        for (const auto& pair: addComps) {
-            for (const auto& pairType: pair.second) {
-                reg.add(pair.first, pairType);
+        for (auto&& [entity, components]: addComps) {
+            for (auto&& component: components) {
+                reg.add(entity, std::move(component));
             }
         }
+        addComps.clear();
 
         for (const auto& pair: addParentChildren) {
             reg.appendChildren(pair.first, pair.second);
@@ -1080,9 +1092,7 @@ private:
         }
 
         delEnts.clear();
-        addEnts.clear();
         delComps.clear();
-        addComps.clear();
         setActiveEnts.clear();
         setInactiveEnts.clear();
         addDontDestroyOnLoadEnts.clear();
@@ -1095,7 +1105,7 @@ private:
                 std::shared_ptr<Archetype> arch = reg.entArch.at(dontDestroyEnt);
                 std::unordered_map<Type, std::shared_ptr<IComponent>> comps;
                 for (auto& pair: arch->pools) {
-                    comps.emplace(pair.first, pair.second.comps.at(dontDestroyEnt));
+                    comps.emplace(pair.first, pair.second.remove_entity(dontDestroyEnt));
                 }
                 dontDestroyes.emplace(dontDestroyEnt, comps);
                 if (auto childrenIt = reg.parentChildrens.find(dontDestroyEnt); childrenIt != reg.parentChildrens.end()) {
@@ -1105,10 +1115,10 @@ private:
             reg.clean();
 
             std::unordered_map<Ent, Ent> oldToNewEnts;
-            for (const auto& pair: dontDestroyes) {
+            for (auto&& [entity, components]: dontDestroyes) {
                 auto newEntId = reg.getEntToken();
-                reg.newEnt(newEntId, pair.second);
-                oldToNewEnts.emplace(pair.first, newEntId);
+                reg.newEnt(newEntId, std::move(components));
+                oldToNewEnts.emplace(entity, newEntId);
             }
             dontDestroyes.clear();
 
@@ -1153,7 +1163,7 @@ class TypeMap final {
 friend class World;
 friend class ZerEngine;
 private:
-    constexpr void emplace(const Type&& type, const std::shared_ptr<IResource>&& resource) noexcept {
+    constexpr void emplace(const Type&& type, std::unique_ptr<IResource>&& resource) noexcept {
         typeMap.emplace(std::move(type), std::move(resource));
     }
 
@@ -1166,7 +1176,7 @@ private:
     }
 
 private:
-    std::unordered_map<std::size_t, std::shared_ptr<IResource>> typeMap;
+    std::unordered_map<std::size_t, std::unique_ptr<IResource>> typeMap;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -1778,17 +1788,17 @@ private:
     [[nodiscard]] auto internalGetThisFrame(const Ent& ent) noexcept -> std::optional<std::reference_wrapper<T>> {
         if (auto addEntsIt = lateUpgrade.addEnts.find(ent); addEntsIt != lateUpgrade.addEnts.end()) {
             if (auto addEntsTypeIt = addEntsIt->second.find(typeid(T).hash_code()); addEntsTypeIt != addEntsIt->second.end()) {
-                return *std::static_pointer_cast<T>(addEntsTypeIt->second);
+                return *static_cast<T*>(addEntsTypeIt->second.get());
             }
         }
         if (auto addCompsIt = lateUpgrade.addComps.find(ent); addCompsIt != lateUpgrade.addComps.end()) {
             if (auto addCompsTypeIt = addCompsIt->second.find(typeid(T).hash_code()); addCompsTypeIt != addCompsIt->second.end()) {
-                return *std::static_pointer_cast<T>(addCompsTypeIt->second);
+                return *static_cast<T*>(addCompsTypeIt->second.get());
             }
         }
         if (reg.has(ent, {typeid(T).hash_code()})) {
             auto& component = reg.get(ent, typeid(T).hash_code());
-            return *std::static_pointer_cast<T>(component);
+            return *static_cast<T*>(component.get());
         }
         return std::nullopt;
     }
@@ -1868,7 +1878,7 @@ public:
 
     template <typename... Ts> requires ((sizeof...(Ts) > 0) && (IsResourceConcept<Ts> && ...) && (!std::is_reference_v<Ts> || ...))
     [[nodiscard("La valeur de retour d'une commande Resource doit toujours etre recupere")]] auto resource(this auto& self) noexcept -> std::tuple<Ts&...> {
-        return std::forward_as_tuple(*std::static_pointer_cast<Ts>(self.res.get(typeid(Ts).hash_code()))...);
+        return std::forward_as_tuple(*static_cast<Ts*>(self.res.get(typeid(Ts).hash_code()).get())...);
     }
 
     [[nodiscard]] auto getDestroyedEnts() const noexcept -> const std::unordered_set<Ent>& {
@@ -2101,7 +2111,7 @@ private:
 class ZerEngine final {
 public:
     ZerEngine() noexcept {
-        world.res.emplace(typeid(Time).hash_code(), std::make_shared<Time>(0.02f));
+        world.res.emplace(typeid(Time).hash_code(), std::make_unique<Time>(0.02f));
     }
 
     [[nodiscard]] constexpr auto use_multithreading(bool newVal) noexcept -> ZerEngine& {
@@ -2117,7 +2127,7 @@ public:
 
     template <typename T, typename... Args> requires (IsResourceConcept<T>)
     [[nodiscard]] auto add_resource(Args&&... args) noexcept -> ZerEngine& {
-        world.res.emplace(typeid(T).hash_code(), std::make_shared<T>(std::forward<Args>(args)...));
+        world.res.emplace(typeid(T).hash_code(), std::make_unique<T>(std::forward<Args>(args)...));
         return *this;
     }
 
