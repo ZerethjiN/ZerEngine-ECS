@@ -108,7 +108,7 @@ auto init_pos(StartSystem, World& world) -> void {
 
 // Systems executed on each frame.
 auto move_pos_sys(ThreadedFixedSystem, World& world) -> void {
-    auto positions = world.view<Position, const Velocity>();
+    auto positions = world.query<Position, const Velocity>();
 
     auto [time] = world.resource<const Time>();
 
@@ -119,7 +119,7 @@ auto move_pos_sys(ThreadedFixedSystem, World& world) -> void {
 }
 
 auto player_action_sys(ThreadedSystem, World& world) -> void {
-    auto players = world.view(with<Player>, without<PlayerDash>);
+    auto players = world.query(with<Player>, without<PlayerDash>);
 
     for (auto [player_ent]: players) {
         if (/*Dash Button Pressed*/) {
@@ -134,7 +134,7 @@ auto player_action_sys(ThreadedSystem, World& world) -> void {
 }
 
 auto player_dash_sys(ThreadedSystem, World& world) -> void {
-    auto players = world.view<PlayerDash, Velocity>();
+    auto players = world.query<PlayerDash, Velocity>();
 
     auto [time] = world.resource<const Time>();
 
