@@ -9,12 +9,15 @@
 #include <ctime>
 #include <functional>
 #include <initializer_list>
+#include <iostream>
 #include <iterator>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <print>
-#include <string>
+#include <ranges>
+#include <set>
 #include <thread>
 #include <tuple>
 #include <unordered_map>
@@ -22,38 +25,94 @@
 #include <utility>
 #include <vector>
 
-constexpr inline std::size_t ZERENGINE_VERSION_MAJOR = 24;
-constexpr inline std::size_t ZERENGINE_VERSION_MINOR = 12;
+constexpr inline std::size_t ZERENGINE_VERSION_MAJOR = 25;
+constexpr inline std::size_t ZERENGINE_VERSION_MINOR = 3;
 constexpr inline std::size_t ZERENGINE_VERSION_PATCH = 0;
 
 using Entity = std::size_t;
 using Type = std::size_t;
 
 template <typename... Filters>
-class With final {};
+struct [[nodiscard]] With final {};
 template <typename... Filters>
 constexpr inline const With<Filters...> with;
 
 template <typename... Excludes>
-class Without final {};
+struct [[nodiscard]] Without final {};
 template <typename... Excludes>
 constexpr inline const Without<Excludes...> without;
 
-class WithInactive final {};
+struct [[nodiscard]] WithInactive final {};
 constexpr inline WithInactive with_inactive;
 
-class IComponent {
+class [[nodiscard]] IComponent {
 protected:
     constexpr IComponent() noexcept = default;
 
 public:
-    constexpr virtual ~IComponent() noexcept = default;
+    constexpr ~IComponent() noexcept = default;
 };
 
-class IsInactive final: public IComponent {};
-class DontDestroyOnLoad final: public IComponent {};
+class [[nodiscard]] WithCascadingInsert {
+protected:
+    constexpr WithCascadingInsert() noexcept = default;
 
-class IResource {
+public:
+    constexpr ~WithCascadingInsert() noexcept = default;
+};
+
+class [[nodiscard]] WithCascadingRemove {
+protected:
+    constexpr WithCascadingRemove() noexcept = default;
+
+public:
+    constexpr ~WithCascadingRemove() noexcept = default;
+};
+
+enum class CascadeMode: uint8_t {
+    INSERT,
+    REMOVE,
+    INSERT_AND_REMOVE,
+};
+
+struct [[nodiscard]] IsInactive final: public IComponent, public WithCascadingInsert {};
+struct [[nodiscard]] DontDestroyOnLoad final: public IComponent, public WithCascadingInsert {};
+
+struct [[nodiscard]] Parent final: public IComponent {
+friend class Registry;
+public:
+    constexpr Parent(const Entity new_parent_entity) noexcept:
+        parent_entity(new_parent_entity) {
+    }
+
+    [[nodiscard]] constexpr operator Entity() const noexcept {
+        return parent_entity;
+    }
+
+private:
+    Entity parent_entity;
+};
+
+struct [[nodiscard]] Children final: public IComponent {
+friend class Registry;
+public:
+    constexpr Children(const std::unordered_set<Entity>& new_children_entities) noexcept:
+        children_entities(new_children_entities) {
+    }
+
+    [[nodiscard]] constexpr std::unordered_set<Entity>::const_iterator begin() const noexcept {
+        return children_entities.begin();
+    }
+
+    [[nodiscard]] constexpr std::unordered_set<Entity>::const_iterator end() const noexcept {
+        return children_entities.end();
+    }
+
+private:
+    std::unordered_set<Entity> children_entities;
+};
+
+class [[nodiscard]] IResource {
 protected:
     constexpr IResource() noexcept = default;
 
@@ -61,34 +120,38 @@ public:
     constexpr virtual ~IResource() noexcept = default;
 };
 
-struct ArchetypeCreateWith final {};
-constexpr inline const ArchetypeCreateWith archetypeCreateWith;
-struct ArchetypeCreateWithout final {};
-constexpr inline const ArchetypeCreateWithout archetypeCreateWithout;
-
-class StartSystem final {};
-constexpr inline const StartSystem startSystem;
-class MainSystem final {};
-constexpr inline const MainSystem mainSystem;
-class MainFixedSystem final {};
-constexpr inline const MainFixedSystem mainFixedSystem;
-class MainUnscaledFixedSystem final {};
-constexpr inline const MainUnscaledFixedSystem mainUnscaledFixedSystem;
-class ThreadedSystem final {};
-constexpr inline const ThreadedSystem threadedSystem;
-class ThreadedFixedSystem final {};
-constexpr inline const ThreadedFixedSystem threadedFixedSystem;
-class ThreadedUnscaledFixedSystem final {};
-constexpr inline const ThreadedUnscaledFixedSystem threadedUnscaledFixedSystem;
-class LateSystem final {};
-constexpr inline const LateSystem lateSystem;
-class LateFixedSystem final {};
-constexpr inline const LateFixedSystem lateFixedSystem;
-class LateUnscaledFixedSystem final {};
-constexpr inline const LateUnscaledFixedSystem lateUnscaledFixedSystem;
-class CallbackSystem final {};
+struct [[nodiscard]] StartSystem final {};
+constexpr inline const StartSystem start_system;
+struct [[nodiscard]] MainSystem final {};
+constexpr inline const MainSystem main_system;
+struct [[nodiscard]] MainFixedSystem final {};
+constexpr inline const MainFixedSystem main_fixed_system;
+struct [[nodiscard]] MainUnscaledFixedSystem final {};
+constexpr inline const MainUnscaledFixedSystem main_unscaled_fixed_system;
+struct [[nodiscard]] ThreadedSystem final {};
+constexpr inline const ThreadedSystem threaded_system;
+struct [[nodiscard]] ThreadedFixedSystem final {};
+constexpr inline const ThreadedFixedSystem threaded_fixed_system;
+struct [[nodiscard]] ThreadedUnscaledFixedSystem final {};
+constexpr inline const ThreadedUnscaledFixedSystem threaded_unscaled_fixed_system;
+struct [[nodiscard]] LateSystem final {};
+constexpr inline const LateSystem late_system;
+struct [[nodiscard]] LateFixedSystem final {};
+constexpr inline const LateFixedSystem late_fixed_system;
+struct [[nodiscard]] LateUnscaledFixedSystem final {};
+constexpr inline const LateUnscaledFixedSystem late_unscaled_fixed_system;
+struct [[nodiscard]] CallbackSystem final {};
 constexpr inline const CallbackSystem callback_system;
-class SceneSystem final {};
+struct [[nodiscard]] SceneSystem final {};
+
+struct [[nodiscard]] OnAddComponentHook final {};
+constexpr inline const OnAddComponentHook on_add_component_hook;
+struct [[nodiscard]] OnCreateEntityHook final {};
+constexpr inline const OnCreateEntityHook on_create_entity_hook;
+struct [[nodiscard]] OnRemoveComponentHook final {};
+constexpr inline const OnRemoveComponentHook on_remove_component_hook;
+struct [[nodiscard]] OnDeleteEntityHook final {};
+constexpr inline const OnDeleteEntityHook on_delete_entity_hook;
 
 template <typename T, typename... FutureTs, typename... PastTs>
 [[nodiscard]] consteval auto impl_is_not_same_rec(With<PastTs...>) noexcept -> bool {
@@ -109,7 +172,7 @@ concept IsNotSameConcept = [] -> bool {
 
 template <typename T>
 concept IsNotEmptyConcept = [] -> bool {
-    static_assert((sizeof(T) > 8), "Impossible de requeter un Marker (objet de taille 0)");
+    static_assert(!std::is_empty_v<T>, "Impossible de requeter un Marker (objet de taille 0)");
     return true;
 }();
 
@@ -131,7 +194,7 @@ concept IsComponentConcept = [] -> bool {
 template <typename T>
 concept IsResourceConcept = [] -> bool {
     static_assert(std::is_class_v<T>, "Impossible d'ajouter une Ressource qui ne soit pas une Classe");
-    static_assert(std::derived_from<T, IResource>, "Impossible d'ajouter une Ressource qui n'implemente pas IComponent");
+    static_assert(std::derived_from<T, IResource>, "Impossible d'ajouter une Ressource qui n'implemente pas IResource");
     static_assert(std::is_final_v<T>, "Impossible d'ajouter une Ressource qui ne soit pas Final");
     static_assert(std::copy_constructible<T>, "Impossible d'ajouter une Ressource qui ne soit pas Copiable");
     return true;
@@ -139,298 +202,150 @@ concept IsResourceConcept = [] -> bool {
 
 ///////////////////////////////////////////////////////////////////////////////////
 
-class CompPool final {
-friend class LateUpgrade;
-public:
-    [[nodiscard]] CompPool() noexcept = default;
-    [[nodiscard]] CompPool(const Entity entity, std::shared_ptr<IComponent>&& component) noexcept:
-        components({{entity, std::move(component)}}) {
-    }
+class Registry;
 
-public:
-    constexpr auto insert_entity(const Entity entity, std::shared_ptr<IComponent>&& component) noexcept -> void {
-        components.emplace(entity, std::move(component));
-    }
-
-    [[nodiscard]] constexpr auto get_entity(const Entity entity) noexcept -> auto& {
-        return components.at(entity);
-    }
-
-    [[nodiscard]] constexpr auto get_entity(const Entity entity) const noexcept -> auto& {
-        return components.at(entity);
-    }
-
-    [[nodiscard]] constexpr auto contains_entity(const Entity entity) const noexcept -> bool {
-        return components.contains(entity);
-    }
-
-    [[nodiscard]] auto remove_entity(const Entity entity) noexcept -> std::shared_ptr<IComponent> {
-        auto component = components.at(entity);
-        components.erase(entity);
-        return component;
-    }
-
-private:
-    std::unordered_map<Entity, std::shared_ptr<IComponent>> components;
+enum class RegistryMessageType: uint8_t {
+    CREATE_ENTITY,
+    ADD_COMPONENT,
+    REMOVE_COMPONENT,
+    DELETE_ENTITY,
+    APPEND_CHILDREN,
+    SET_ACTIVE,
+    SET_INACTIVE,
+    ADD_DONT_DESTROY_ON_LOAD,
 };
 
-// class IComponentPool {
-// protected:
-//     [[nodiscard]] constexpr IComponentPool() noexcept = default;
+class [[nodiscard]] RegistryMessage final {
+public:
+    RegistryMessage(RegistryMessageType new_message_type, void(*const new_callback)(Registry&, const Entity, std::pair<Type, std::unique_ptr<IComponent>>&&, const std::vector<Type>&, const std::vector<Entity>&), const Entity new_entity, std::pair<Type, std::unique_ptr<IComponent>>&& new_component) noexcept:
+        callback(new_callback),
+        entity(new_entity),
+        component(std::move(new_component)),
+        message_type(new_message_type) {
+    }
 
-// public:
-//     constexpr virtual ~IComponentPool() noexcept = default;
+    RegistryMessage(RegistryMessageType new_message_type, void(*const new_callback)(Registry&, const Entity, std::pair<Type, std::unique_ptr<IComponent>>&&, const std::vector<Type>&, const std::vector<Entity>&), const Entity new_entity, std::vector<Type>&& new_types) noexcept:
+        callback(new_callback),
+        entity(new_entity),
+        component_types(std::move(new_types)),
+        message_type(new_message_type) {
+    }
 
-// public:
-//     constexpr virtual void remove_component(const Entity entity) noexcept = 0;
-//     constexpr virtual void clear() noexcept = 0;
-//     [[nodiscard]] constexpr virtual bool empty() const noexcept = 0;
-//     [[nodiscard]] constexpr virtual std::size_t size() const noexcept = 0;
-// };
+    RegistryMessage(RegistryMessageType new_message_type, void(*const new_callback)(Registry&, const Entity, std::pair<Type, std::unique_ptr<IComponent>>&&, const std::vector<Type>&, const std::vector<Entity>&), const Entity new_entity) noexcept:
+        callback(new_callback),
+        entity(new_entity),
+        message_type(new_message_type) {
+    }
 
-// template <typename T>
-// class ComponentPool final: public IComponentPool {
-// public:
-//     constexpr void add_component(const Entity entity, T&& component) noexcept {
-//         entity_components.emplace(entity, std::move(component));
-//     }
+    RegistryMessage(RegistryMessageType new_message_type, void(*const new_callback)(Registry&, const Entity, std::pair<Type, std::unique_ptr<IComponent>>&&, const std::vector<Type>&, const std::vector<Entity>&), const Entity new_entity, const std::vector<Entity>& new_children_entities) noexcept:
+        callback(new_callback),
+        entity(new_entity),
+        children_entities(new_children_entities),
+        message_type(new_message_type) {
+    }
 
-//     constexpr void remove_component(const Entity entity) noexcept override final {
-//         entity_components.erase(entity);
-//     }
-
-//     constexpr void clear() noexcept override final {
-//         entity_components.clear();
-//     }
-
-//     [[nodiscard]] constexpr bool empty() const noexcept override final {
-//         return entity_components.empty();
-//     }
-
-//     [[nodiscard]] constexpr std::size_t size() const noexcept override final {
-//         entity_components.size();
-//     }
-
-// private:
-//     std::unordered_map<Entity, T> entity_components;
-// };
+public:
+    void(*const callback)(Registry&, const Entity, std::pair<Type, std::unique_ptr<IComponent>>&&, const std::vector<Type>&, const std::vector<Entity>&);
+    const Entity entity;
+    std::pair<Type, std::unique_ptr<IComponent>> component;
+    std::vector<Type> component_types;
+    std::vector<Entity> children_entities;
+    RegistryMessageType message_type;
+};
 
 ///////////////////////////////////////////////////////////////////////////////////
 
-class Archetype final {
+class [[nodiscard]] Archetype final {
 friend class Registry;
 friend class LiteArchetype;
 friend class LateUpgrade;
 template <typename... Ts>
 friend class Query;
 public:
-    Archetype() noexcept = default;
-
-    Archetype(const Entity entity, std::unordered_map<Type, std::shared_ptr<IComponent>>&& components) noexcept:
-        ents({entity}),
-        pools(std::move(generate_pools(entity, std::move(components)))) {
+    Archetype() noexcept {
+        nb_archetypes++;
     }
 
-    Archetype(ArchetypeCreateWith, const std::unique_ptr<Archetype>& old_archetype, const Entity entity, std::pair<const Type, std::shared_ptr<IComponent>>&& component) noexcept:
-        ents({entity}),
-        pools(std::move(generate_pools(archetypeCreateWith, old_archetype, entity, std::move(component)))) {
+    Archetype(const std::shared_ptr<Archetype>& old_archetype, const Type new_type) noexcept:
+        types(std::move(generate_pools(old_archetype, new_type))),
+        previous_archetype(old_archetype) {
+        nb_archetypes++;
     }
 
-    Archetype(ArchetypeCreateWithout, const std::unique_ptr<Archetype>& old_archetype, const Entity entity, const Type component_type) noexcept:
-        ents({entity}),
-        pools(std::move(generate_pools(archetypeCreateWithout, old_archetype, entity, component_type))) {
+    ~Archetype() {
+        nb_archetypes--;
     }
 
 private:
-    [[nodiscard]] static auto generate_pools(const Entity entity, std::unordered_map<Type, std::shared_ptr<IComponent>>&& components) noexcept -> std::unordered_map<Type, std::unique_ptr<CompPool>> {
-        std::unordered_map<Type, std::unique_ptr<CompPool>> new_pools(components.size());
-        for (auto&& [type, component]: components) {
-            new_pools.emplace(
-                std::piecewise_construct,
-                std::forward_as_tuple(type),
-                std::forward_as_tuple(component ? std::make_unique<CompPool>(entity, std::move(component)) : nullptr)
-            );
-        }
-        return new_pools;
+    [[nodiscard]] static auto generate_pools(const std::shared_ptr<Archetype>& old_archetype, const Type new_type) noexcept -> std::set<Type> {
+        auto new_types = old_archetype->types;
+        new_types.emplace(new_type);
+        return new_types;
     }
 
-    [[nodiscard]] static auto generate_pools(ArchetypeCreateWith, const std::unique_ptr<Archetype>& old_archetype, const Entity entity, std::pair<const Type, std::shared_ptr<IComponent>>&& component) noexcept -> std::unordered_map<Type, std::unique_ptr<CompPool>> {
-        std::unordered_map<Type, std::unique_ptr<CompPool>> new_pools(old_archetype->pools.size() + 1);
-        for (auto&& [old_type, old_component]: old_archetype->pools) {
-            new_pools.emplace(
-                std::piecewise_construct,
-                std::forward_as_tuple(old_type),
-                std::forward_as_tuple(old_component ? std::make_unique<CompPool>(entity, std::move(old_component->remove_entity(entity))) : nullptr)
-            );
-        }
-        new_pools.emplace(
+private:
+    constexpr void emplace_entity(const Entity entity) noexcept {
+        entity_components.emplace(
             std::piecewise_construct,
-            std::forward_as_tuple(component.first),
-            std::forward_as_tuple(component.second ? std::make_unique<CompPool>(entity, std::move(component.second)) : nullptr)
+            std::forward_as_tuple(entity),
+            std::forward_as_tuple()
         );
-        old_archetype->destroy(entity);
-        return new_pools;
     }
 
-    [[nodiscard]] static auto generate_pools(ArchetypeCreateWithout, const std::unique_ptr<Archetype>& old_archetype, const Entity entity, const Type component_type) noexcept -> std::unordered_map<Type, std::unique_ptr<CompPool>> {
-        std::unordered_map<Type, std::unique_ptr<CompPool>> new_pools(old_archetype->pools.size() - 1);
-        for (auto&& [old_type, old_component]: old_archetype->pools) {
-            if (old_type != component_type) {
-                new_pools.emplace(
-                    std::piecewise_construct,
-                    std::forward_as_tuple(old_type),
-                    std::forward_as_tuple(old_component ? std::make_unique<CompPool>(entity, std::move(old_component->remove_entity(entity))) : nullptr)
-                );
-            }
-        }
-        old_archetype->destroy(entity);
-        return new_pools;
-    }
-
-private:
-    constexpr auto new_entity(const Entity entity, std::unordered_map<Type, std::shared_ptr<IComponent>>&& components) noexcept -> void {
-        ents.emplace(entity);
-        for (auto&& [type, component]: components) {
-            if (component) {
-                pools.at(type)->insert_entity(entity, std::move(component));
-            }
+    constexpr void move_entity_with(const std::shared_ptr<Archetype>& old_archetype, const Entity entity, std::pair<Type, std::unique_ptr<IComponent>>&& new_component) noexcept {
+        entity_components.insert(std::move(old_archetype->entity_components.extract(entity)));
+        if (new_component.second != nullptr) {
+            entity_components.at(entity).emplace(std::move(new_component));
         }
     }
 
-    auto add_component(const Entity entity, const std::unique_ptr<Archetype>& oldArch, std::pair<const Type, std::shared_ptr<IComponent>>&& component) noexcept -> void {
-        ents.emplace(entity);
-        for (auto& [old_type, old_component_pool]: oldArch->pools) {
-            if (old_component_pool) {
-                pools.at(old_type)->insert_entity(entity, std::move(old_component_pool->remove_entity(entity)));
-            }
-        }
-        if (component.second) {
-            pools.at(component.first)->insert_entity(entity, std::move(component.second));
-        }
-        oldArch->destroy(entity);
+    constexpr void move_entity_without(const std::shared_ptr<Archetype>& old_archetype, const Entity entity, const Type new_type) noexcept {
+        entity_components.insert(std::move(old_archetype->entity_components.extract(entity)));
+        entity_components.at(entity).erase(new_type);
     }
 
-    auto remove_component(const Entity entity, const std::unique_ptr<Archetype>& oldArch, const Type component_type) noexcept -> void {
-        ents.emplace(entity);
-        for (auto& [old_type, old_component_pool]: oldArch->pools) {
-            if (old_type != component_type && old_component_pool) {
-                pools.at(old_type)->insert_entity(entity, std::move(old_component_pool->remove_entity(entity)));
-            }
-        }
-        oldArch->destroy(entity);
+    constexpr void delete_entity(const Entity entity) noexcept {
+        entity_components.erase(entity);
     }
 
-    [[nodiscard]] constexpr auto get(const Entity entity, const Type component_type) noexcept -> auto& {
-        return pools.at(component_type)->get_entity(entity);
+    [[nodiscard]] constexpr auto get_component(const Entity entity, const Type type) noexcept -> const std::unique_ptr<IComponent>& {
+        return entity_components.at(entity).at(type);
     }
 
-    [[nodiscard]] constexpr auto get(const Entity entity, const Type component_type) const noexcept -> auto& {
-        return pools.at(component_type)->get_entity(entity);
-    }
-
-    auto destroy(const Entity entity) noexcept -> void {
-        ents.erase(entity);
-        for (auto& [_, comp_pool]: pools) {
-            if (comp_pool && comp_pool->contains_entity(entity)) {
-                static_cast<void>(comp_pool->remove_entity(entity));
-            }
-        }
-    }
-
-    [[nodiscard]] constexpr auto empty() const noexcept -> bool {
-        return ents.empty();
-    }
-
-    [[nodiscard]] constexpr auto size() const noexcept -> std::size_t {
-        return ents.size();
-    }
-
-    [[nodiscard]] constexpr auto containsType(const Type type) const noexcept -> bool {
-        return pools.contains(type);
-    }
-
-private:
-    template <typename... Ts>
-    [[nodiscard]] constexpr auto getTupleWithEnt(const Entity entity) noexcept -> std::tuple<const Entity, Ts&...> {
-        return std::forward_as_tuple(entity, (*static_cast<Ts*>(get(entity, typeid(Ts).hash_code()).get()))...);
-    }
-
-private:
-    [[nodiscard]] constexpr auto isTotalyCompatibleLate(const std::unordered_map<Type, std::shared_ptr<IComponent>>& components) const noexcept -> bool {
-        if (components.size() != pools.size()) {
-            return false;
-        }
-        for (const auto& [type, _]: components) {
-            if (!pools.contains(type)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    [[nodiscard]] auto isTotalyCompatibleLate(const std::unique_ptr<Archetype>& oldArch, const Type component_type) const noexcept -> bool {
-        if (oldArch->pools.size() + 1 != pools.size() || !pools.contains(component_type)) {
-            return false;
-        }
-        for (const auto& [old_type, _]: oldArch->pools) {
-            if (!pools.contains(old_type)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    [[nodiscard]] auto isTotalyCompatibleWithoutLate(const std::unique_ptr<Archetype>& oldArch, const Type component_type) const noexcept -> bool {
-        if (oldArch->pools.size() - 1 != pools.size() || pools.contains(component_type)) {
-            return false;
-        }
-        for (const auto& [old_type, _]: oldArch->pools) {
-            if (!pools.contains(old_type) && old_type != component_type) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-private:
-    std::unordered_set<Entity> ents;
-    const std::unordered_map<Type, std::unique_ptr<CompPool>> pools;
+public:
+    static inline std::size_t nb_archetypes = 0;
+    const std::set<Type> types;
+    std::unordered_map<Entity, std::unordered_map<Type, std::unique_ptr<IComponent>>> entity_components;
+    std::weak_ptr<Archetype> previous_archetype;
+    std::map<Type, std::shared_ptr<Archetype>> next_archetypes;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
 
 template <typename... Ts>
-class Query final {
+class [[nodiscard]] Query final {
 friend class Registry;
 friend class LiteRegistry;
 private:
-    constexpr Query(std::unordered_map<std::size_t, std::reference_wrapper<Archetype>>&& newArchs) noexcept:
-        archs(std::move(newArchs)) {
+    constexpr Query(const std::unordered_set<std::shared_ptr<Archetype>>& newArchs) noexcept:
+        archs(newArchs) {
     }
 
 public:
     [[nodiscard]] constexpr auto empty() const noexcept -> bool {
-        if (archs.empty()) {
-            return true;
-        }
-        for (const auto& [_, archetype]: archs) {
-            if (!archetype.get().empty()) {
-                return false;
-            }
-        }
-        return true;
+        return archs.empty();
     }
 
     [[nodiscard]] constexpr auto size() const noexcept -> std::size_t {
-        std::size_t newSize = 0;
-        for (const auto& [_, archetype]: archs) {
-            newSize += archetype.get().size();
+        std::size_t new_size = 0;
+        for (const auto& archetype: archs) {
+            new_size += archetype->entity_components.size();
         }
-        return newSize;
+        return new_size;
     }
 
 private:
-    class QueryIterator final {
+    class [[nodiscard]] QueryIterator final {
     friend class Query;
     public:
         using iterator_category = std::forward_iterator_tag;
@@ -441,11 +356,13 @@ private:
         using difference_type = std::ptrdiff_t;
 
     public:
-        QueryIterator(const std::unordered_map<std::size_t, std::reference_wrapper<Archetype>>& newArchs, std::unordered_map<std::size_t, std::reference_wrapper<Archetype>>::const_iterator newArchsIt) noexcept:
+        QueryIterator(const std::unordered_set<std::shared_ptr<Archetype>>& newArchs, std::unordered_set<std::shared_ptr<Archetype>>::const_iterator newArchsIt) noexcept:
             archsIt(newArchsIt),
             archs(newArchs) {
             if (archsIt != newArchs.end()) {
-                entsIt = archsIt->second.get().ents.begin();
+                if (!(*archsIt)->entity_components.empty()) {
+                    entsIt = (*archsIt)->entity_components.begin();
+                }
             }
         }
 
@@ -458,15 +375,15 @@ private:
         ~QueryIterator() = default;
 
         [[nodiscard]] constexpr auto operator *() const noexcept -> value_type {
-            return archsIt->second.get().template getTupleWithEnt<Ts...>((*entsIt));
+            return std::tuple_cat(std::forward_as_tuple(entsIt->first), std::forward_as_tuple(*static_cast<Ts*>((*archsIt)->get_component(entsIt->first, typeid(Ts).hash_code()).get())...));
         }
 
         constexpr auto operator ++() noexcept -> QueryIterator& {
             entsIt++;
-            if (entsIt == archsIt->second.get().ents.end()) {
+            if (entsIt == (*archsIt)->entity_components.end()) {
                 archsIt++;
                 if (archsIt != archs.end()) {
-                    entsIt = archsIt->second.get().ents.begin();
+                    entsIt = (*archsIt)->entity_components.begin();
                 }
             }
             return *this;
@@ -477,9 +394,9 @@ private:
         }
 
     private:
-        std::unordered_map<std::size_t, std::reference_wrapper<Archetype>>::const_iterator archsIt;
-        std::unordered_set<Entity>::iterator entsIt;
-        const std::unordered_map<std::size_t, std::reference_wrapper<Archetype>>& archs;
+        std::unordered_set<std::shared_ptr<Archetype>>::const_iterator archsIt;
+        std::unordered_map<Entity, std::unordered_map<Type, std::unique_ptr<IComponent>>>::iterator entsIt;
+        const std::unordered_set<std::shared_ptr<Archetype>>& archs;
     };
 
 public:
@@ -492,798 +409,759 @@ public:
     }
 
 private:
-    const std::unordered_map<std::size_t, std::reference_wrapper<Archetype>> archs;
+    const std::unordered_set<std::shared_ptr<Archetype>> archs;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
 
-class Registry final {
+class [[nodiscard]] Registry final {
 friend class World;
 friend class LateUpgrade;
 private:
-    Registry() noexcept {
-        archs.emplace(0, std::move(std::make_unique<Archetype>()));
-    }
+    [[nodiscard]] constexpr auto get_entity_token() noexcept -> Entity {
+        auto token = last_entity_token++;
 
-private:
-    [[nodiscard]] constexpr auto getEntToken() noexcept -> Entity {
-        Entity token = lastEnt++;
-
-        if (!entTokens.empty()) {
-            lastEnt--;
-            token = entTokens.back();
-            entTokens.pop_back();
+        if (!entity_tokens.empty()) {
+            last_entity_token--;
+            token = entity_tokens.back();
+            entity_tokens.pop_back();
+            return token;
         }
 
-        // entArch.emplace(token, 0);
-
-        return token;
-    }
-
-    [[nodiscard]] constexpr auto get_archetype_token() noexcept -> std::size_t {
-        auto token = last_archetype_token++;
-
-        if (!archetype_tokens.empty()) {
-            last_archetype_token--;
-            token = archetype_tokens.back();
-            archetype_tokens.pop_back();
+        while (entArch.contains(token)) {
+            token = last_entity_token++;
         }
 
         return token;
     }
 
-    auto newEnt(const Entity entity, std::unordered_map<Type, std::shared_ptr<IComponent>>&& components) noexcept -> void {
-        std::unordered_map<std::size_t, std::reference_wrapper<Archetype>> compatible_archetypes(archs.size());
-        for (auto& [archetype_id, archetype]: archs) {
-            compatible_archetypes.emplace(archetype_id, *archetype);
-        }
-        for (const auto& [type, _]: components) {
-            filterArchsByType(type, compatible_archetypes);
-        }
-        for (auto& [archetype_id, archetype]: compatible_archetypes) {
-            if (archetype.get().isTotalyCompatibleLate(components)) {
-                archetype.get().new_entity(entity, std::move(components));
-                // entArchIt->second = archetype_id;
-                entArch.emplace(entity, archetype_id);
-                return;
-            }
+public:
+    constexpr void create_entity(const Entity entity) noexcept {
+        if (entArch.contains(entity)) {
+            std::cerr << "Registry::create_entity(): Impossible d'ajouter deux fois la meme entité: Entity[" << entity << "]" << std::endl;
+            return;
         }
 
-        const auto& [new_archetype_id, new_archetype] = *archs.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(get_archetype_token()),
-            std::forward_as_tuple(std::make_unique<Archetype>(entity, std::move(components)))
-        ).first;
-        for (const auto& [type, _]: new_archetype->pools) {
-            emplaceArchByType(type, new_archetype_id);
-        }
-        // entArchIt->second = new_archetype_id;
-        entArch.emplace(entity, new_archetype_id);
+        entArch.emplace(entity, archetype_root);
+        archetype_root->emplace_entity(entity);
     }
 
-    auto add(const Entity entity, std::pair<const Type, std::shared_ptr<IComponent>>&& component) noexcept -> void {
+    constexpr void add_components(const Entity entity, std::pair<Type, std::unique_ptr<IComponent>>&& new_component) noexcept {
         auto entArchIt = entArch.find(entity);
         if (entArchIt == entArch.end()) {
-            std::println("ZerEngine::Registry::add - Impossible d'ajouter un composant sur une entité inexistante - Entity[{}]", entity);
+            std::cerr << "Registry::add_components(): Impossible d'ajouter un composant sur une entite inexistante: Entity[" << entity << "]" << std::endl;
             return;
         }
 
-        auto archetypes_it = archs.find(entArchIt->second);
-        if (archetypes_it == archs.end()) {
-            std::println("ZerEngine::Registry::add - Impossible d'utiliser un archetype - Entity[{}]", entity);
+        if (entArchIt->second->types.contains(new_component.first)) {
+            std::cerr << "Registry::add_components(): Impossible d'ajouter deux fois le meme composant sur une entite: Entity[" << entity << "]" << std::endl;
             return;
         }
 
-        if (archetypes_it->second->containsType(component.first)) {
-            std::println("ZerEngine - Registry: Impossible d'ajouter 2 composants identiques  - Entity[{}]", entity);
-            return;
-        }
+        auto old_archetype = entArchIt->second;
 
-        const auto& old_archetype_id = archetypes_it->first;
-        const auto& old_archetype = archetypes_it->second;
-
-        std::unordered_map<std::size_t, std::reference_wrapper<Archetype>> compatible_archetypes(archs.size());
-        for (auto& [archetype_id, archetype]: archs) {
-            compatible_archetypes.emplace(archetype_id, *archetype);
-        }
-        for (const auto& [old_type, _]: old_archetype->pools) {
-            filterArchsByType(old_type, compatible_archetypes);
-        }
-        filterArchsByType(component.first, compatible_archetypes);
-        for (auto& [archetype_id, archetype]: compatible_archetypes) {
-            if (archetype.get().isTotalyCompatibleLate(old_archetype, component.first)) {
-                archetype.get().add_component(entity, old_archetype, std::move(component));
-                emplaceArchByType(component.first, archetype_id);
-                removeOldArchIfEmpty(old_archetype_id);
-                entArchIt->second = archetype_id;
-                return;
+        if (auto next_archetype_it = old_archetype->next_archetypes.find(new_component.first); next_archetype_it != old_archetype->next_archetypes.end()) {
+            entArchIt->second = next_archetype_it->second;
+        } else {
+            if (!old_archetype->types.empty() && *std::prev(old_archetype->types.end()) >= new_component.first) {
+                if (*std::prev(old_archetype->types.end()) > new_component.first) {
+                    auto ordered_types = old_archetype->types;
+                    ordered_types.emplace(new_component.first);
+                    create_branch(ordered_types, entity);
+                }
+            } else {
+                entArchIt->second = old_archetype->next_archetypes.emplace(
+                    new_component.first,
+                    std::make_shared<Archetype>(old_archetype, new_component.first)
+                ).first->second;
             }
         }
+        entArchIt->second->move_entity_with(old_archetype, entity, std::move(new_component));
 
-        const auto& [new_archetype_id, new_archetype] = *archs.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(get_archetype_token()),
-            std::forward_as_tuple(std::make_unique<Archetype>(archetypeCreateWith, old_archetype, entity, std::move(component)))
-        ).first;
-        for (const auto& [type, _]: new_archetype->pools) {
-            emplaceArchByType(type, new_archetype_id);
-        }
-        removeOldArchIfEmpty(old_archetype_id);
-        entArchIt->second = new_archetype_id;
+        graph_readjustement(old_archetype);
     }
 
-    auto remove(const Entity entity, const Type component_type) noexcept -> void {
+    constexpr void remove_components(const Entity entity, const std::vector<Type>& new_types) noexcept {
         auto entArchIt = entArch.find(entity);
         if (entArchIt == entArch.end()) {
-            std::println("ZerEngine::Registry::remove - Impossible de supprimer un composant sur une entite inexistante - [{}]", entity);
+            std::cerr << "Registry::remove_components(): Impossible de supprimer un composant sur une entite inexistante: Entity[" << entity << "]" << std::endl;
             return;
         }
 
-        auto archetypes_it = archs.find(entArchIt->second);
-        if (archetypes_it == archs.end()) {
-            std::println("ZerEngine::Registry::remove - Impossible de supprimer 2 composants identiques  - Entity[{}]", entity);
-            return;
-        }
-
-        if (!archetypes_it->second->containsType(component_type)) {
-            std::println("ZerEngine::Registry::remove - Impossible de supprimer 2 composants identiques  - Entity[{}]", entity);
-            return;
-        }
-
-        const auto& old_archetype_id = archetypes_it->first;
-        const auto& old_archetype = archetypes_it->second;
-
-        std::unordered_map<std::size_t, std::reference_wrapper<Archetype>> compatible_archetypes(archs.size());
-        for (auto& [archetype_id, archetype]: archs) {
-            compatible_archetypes.emplace(archetype_id, *archetype);
-        }
-        for (const auto& [old_type, _]: old_archetype->pools) {
-            if (old_type != component_type) {
-                filterArchsByType(old_type, compatible_archetypes);
-            }
-        }
-        for (auto& [archetype_id, archetype]: compatible_archetypes) {
-            if (archetype.get().isTotalyCompatibleWithoutLate(old_archetype, component_type)) {
-                archetype.get().remove_component(entity, old_archetype, component_type);
-                removeOldArchIfEmpty(old_archetype_id);
-                entArchIt->second = archetype_id;
+        for (auto new_type: new_types) {
+            if (!entArchIt->second->types.contains(new_type)) {
+                std::cerr << "Registry::remove_components(): Impossible de supprimer un composant inexistant sur une entite: Entity[" << entity << "]" << std::endl;
                 return;
             }
-        }
 
-        const auto& [new_archetype_id, new_archetype] = *archs.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(get_archetype_token()),
-            std::forward_as_tuple(std::make_unique<Archetype>(archetypeCreateWithout, old_archetype, entity, component_type))
-        ).first;
-        for (const auto& [type, _]: new_archetype->pools) {
-            emplaceArchByType(type, new_archetype_id);
+            auto old_archetype = entArchIt->second;
+
+            if (*std::prev(old_archetype->types.end()) == new_type) {
+                entArchIt->second = old_archetype->previous_archetype.lock();
+            } else {
+                auto ordered_types = old_archetype->types;
+                ordered_types.erase(new_type);
+                create_branch(ordered_types, entity);
+            }
+            entArchIt->second->move_entity_without(old_archetype, entity, new_type);
+
+            graph_readjustement(old_archetype);
         }
-        removeOldArchIfEmpty(old_archetype_id);
-        entArchIt->second = new_archetype_id;
     }
 
-    [[nodiscard]] constexpr auto exist(const Entity entity) const noexcept -> bool {
+    constexpr void delete_entity(const Entity entity) noexcept {
+        if (!entArch.contains(entity)) {
+            std::cerr << "Registry::delete_entity(): Impossible de supprimer une entite inexistante: Entity[" << entity << "]" << std::endl;
+            return;
+        }
+
+        detach_children(entity);
+        remove_parent(entity);
+
+        auto old_archetype = entArch.find(entity)->second;
+
+        old_archetype->delete_entity(entity);
+        entity_tokens.push_back(entity);
+        entArch.erase(entity);
+        graph_readjustement(old_archetype);
+    }
+
+    [[nodiscard]] constexpr auto is_entity_exist(const Entity entity) const noexcept -> bool {
         return entArch.contains(entity);
     }
 
-    [[nodiscard]] auto has(const Entity entity, const std::initializer_list<Type>& types) const noexcept -> bool {
+    [[nodiscard]] auto has_components(const Entity entity, const std::initializer_list<Type>& types) const noexcept -> bool {
         auto entArchIt = entArch.find(entity);
         if (entArchIt == entArch.end()) {
+            // std::cerr << "Registry::has_component(): L'entite n'existe pas/plus [" << entity << "]" << std::endl;
             return false;
         }
-        auto archetypes_it = archs.find(entArchIt->second);
-        if (archetypes_it == archs.end()) {
+        if (!entArchIt->second) {
+            std::cerr << "Registry::has_component(): le noeud a expirer ?!?" << std::endl;
             return false;
         }
         for (const auto& type: types) {
-            if (!archetypes_it->second->pools.contains(type)) {
+            if (!entArchIt->second->types.contains(type)) {
                 return false;
             }
         }
         return true;
     }
 
-    [[nodiscard]] constexpr auto get(const Entity entity, const Type component_type) noexcept -> auto& {
-        return archs.at(entArch.at(entity))->get(entity, component_type);
-    }
-
-    [[nodiscard]] constexpr auto get(const Entity entity, const Type component_type) const noexcept -> auto& {
-        return archs.at(entArch.at(entity))->get(entity, component_type);
-    }
-
-    auto destroy(const Entity entity) noexcept -> void {
-        auto entArchIt = entArch.find(entity);
-        if (entArchIt == entArch.end()) {
-            std::println("ZerEngine::Registry::Destroy - Impossible de detruire une entitée qui n'existe pas");
-            return;
-        }
-
-        auto archetypes_it = archs.find(entArchIt->second);
-        if (archetypes_it == archs.end()) {
-            std::println("ZerEngine::Registry::Destroy - Impossible de detruire une entitée qui n'existe pas");
-            return;
-        }
-
-        const auto& old_archetype_id = archetypes_it->first;
-        const auto& old_archetype = archetypes_it->second;
-        old_archetype->destroy(entity);
-        entTokens.push_back(entity);
-        detachChildren(entity);
-        removeParent(entity);
-        removeOldArchIfEmpty(old_archetype_id);
-        entArch.erase(entArchIt);
-    }
-
-    auto clean() noexcept -> void {
-        lastEnt = 1;
-        entTokens.clear();
-        last_archetype_token = 1;
-        archetype_tokens.clear();
-        archs.clear();
-        archs.emplace(0, std::make_unique<Archetype>());
-        entArch.clear();
-        archsByType.clear();
-        parentChildrens.clear();
-        childrenParent.clear();
-    }
-
-private:
-    constexpr auto appendChildrenInactiveRecDown(const Entity parentEntity) noexcept -> void {
-        if (auto childrenOpt = getChildren(parentEntity)) {
-            for (auto childEnt: childrenOpt.value().get()) {
-                if (!has(childEnt, {typeid(IsInactive).hash_code()})) {
-                    add(childEnt, std::pair(typeid(IsInactive).hash_code(), std::make_shared<IsInactive>()));
-                }
-                appendChildrenInactiveRecDown(childEnt);
-            }
-        }
-    }
-
-    constexpr auto appendChildrenInactiveRecUp(const Entity parentEntity) noexcept -> void {
-        if (has(parentEntity, {typeid(IsInactive).hash_code()})) {
-            if (auto childrenOpt = getChildren(parentEntity)) {
-                for (auto childEnt: childrenOpt.value().get()) {
-                    if (!has(childEnt, {typeid(IsInactive).hash_code()})) {
-                        add(childEnt, std::pair(typeid(IsInactive).hash_code(), std::make_shared<IsInactive>()));
-                    }
-                    appendChildrenInactiveRecDown(childEnt);
+    [[nodiscard]] constexpr auto get(const Entity entity, const Type type) noexcept -> std::optional<std::reference_wrapper<std::unique_ptr<IComponent>>> {
+        if (auto entArchIt = entArch.find(entity); entArchIt != entArch.end()) {
+            if (auto entity_components_it = entArchIt->second->entity_components.find(entity); entity_components_it != entArchIt->second->entity_components.end()) {
+                if (auto components_it = entity_components_it->second.find(type); components_it != entity_components_it->second.end()) {
+                    return components_it->second;
                 }
             }
-            return;
-        }
-
-        if (auto parentOpt = getParent(parentEntity)) {
-            appendChildrenInactiveRecUp(parentOpt.value());
-        }
-    }
-
-    constexpr auto appendChildrenDontDestroyOnLoadRecDown(const Entity parentEntity) noexcept -> void {
-        if (auto childrenOpt = getChildren(parentEntity)) {
-            for (auto childEnt: childrenOpt.value().get()) {
-                if (!has(childEnt, {typeid(DontDestroyOnLoad).hash_code()})) {
-                    add(childEnt, std::pair(typeid(DontDestroyOnLoad).hash_code(), std::make_shared<DontDestroyOnLoad>()));
-                }
-                appendChildrenDontDestroyOnLoadRecDown(childEnt);
-            }
-        }
-    }
-
-    constexpr auto appendChildrenDontDestroyOnLoadRecUp(const Entity parentEntity) noexcept -> void {
-        if (has(parentEntity, {typeid(DontDestroyOnLoad).hash_code()})) {
-            if (auto childrenOpt = getChildren(parentEntity)) {
-                for (auto childEnt: childrenOpt.value().get()) {
-                    if (!has(childEnt, {typeid(DontDestroyOnLoad).hash_code()})) {
-                        add(childEnt, std::pair(typeid(DontDestroyOnLoad).hash_code(), std::make_shared<DontDestroyOnLoad>()));
-                    }
-                    appendChildrenDontDestroyOnLoadRecDown(childEnt);
-                }
-            }
-            return;
-        }
-
-        if (auto parentOpt = getParent(parentEntity)) {
-            appendChildrenDontDestroyOnLoadRecUp(parentOpt.value());
-        }
-    }
-
-    auto appendChildren(const Entity parentEntity, const std::unordered_set<Entity>& childrenEnt) noexcept -> void {
-        auto parentIt = parentChildrens.find(parentEntity);
-        if (parentIt == parentChildrens.end()) {
-            parentIt = parentChildrens.emplace(
-                std::piecewise_construct,
-                std::forward_as_tuple(parentEntity),
-                std::forward_as_tuple()
-            ).first;
-        }
-        for (const auto childEnt: childrenEnt) {
-            if (childrenParent.contains(childEnt)) {
-                std::println("Children: Tu ne peux pas avoir deux parents Billy[{}]", childEnt);
-            } else if (parentEntity == childEnt) {
-                std::println("Children: Impossible d'etre son propre pere");
-            } else {
-                childrenParent.emplace(childEnt, parentEntity);
-                parentIt->second.emplace(childEnt);
-            }
-        }
-        if (parentIt->second.empty()) {
-            parentChildrens.erase(parentIt);
-        }
-        appendChildrenInactiveRecUp(parentEntity);
-        appendChildrenDontDestroyOnLoadRecUp(parentEntity);
-    }
-
-    auto appendChildren(const Entity parentEntity, const std::vector<Entity>& childrenEnt) noexcept -> void {
-        auto parentIt = parentChildrens.find(parentEntity);
-        if (parentIt == parentChildrens.end()) {
-            parentIt = parentChildrens.emplace(
-                std::piecewise_construct,
-                std::forward_as_tuple(parentEntity),
-                std::forward_as_tuple()
-            ).first;
-        }
-        for (const auto childEnt: childrenEnt) {
-            if (childrenParent.contains(childEnt)) {
-                std::println("Children: Tu ne peux pas avoir deux parents Billy[{}]", childEnt);
-            } else if (parentEntity == childEnt) {
-                std::println("Children: Impossible d'etre son propre pere");
-            } else {
-                childrenParent.emplace(childEnt, parentEntity);
-                parentIt->second.emplace(childEnt);
-            }
-        }
-        if (parentIt->second.empty()) {
-            parentChildrens.erase(parentIt);
-        }
-        appendChildrenInactiveRecUp(parentEntity);
-        appendChildrenDontDestroyOnLoadRecUp(parentEntity);
-    }
-
-    auto detachChildren(const Entity parentEntity) noexcept -> void {
-        if (auto parentIt = parentChildrens.find(parentEntity); parentIt != parentChildrens.end()) {
-            for (const auto childEnt: parentIt->second) {
-                if (auto childrenIt = childrenParent.find(childEnt); childrenIt != childrenParent.end()) {
-                    childrenParent.erase(childrenIt);
-                }
-            }
-            parentChildrens.erase(parentIt);
-        }
-    }
-
-    auto removeParent(const Entity childEntity) noexcept -> void {
-        if (auto childrenIt = childrenParent.find(childEntity); childrenIt != childrenParent.end()) {
-            if (auto parentIt = parentChildrens.find(childrenIt->second); parentIt != parentChildrens.end()) {
-                parentIt->second.erase(childEntity);
-                if (parentIt->second.empty()) {
-                    parentChildrens.erase(parentIt);
-                }
-            }
-            childrenParent.erase(childrenIt);
-        }
-    }
-
-    [[nodiscard]] constexpr auto hasChildren(const Entity parentEntity) const noexcept -> bool {
-        return parentChildrens.contains(parentEntity);
-    }
-
-    [[nodiscard]] auto getChildren(const Entity parentEntity) const noexcept -> std::optional<std::reference_wrapper<const std::unordered_set<Entity>>> {
-        if (auto parentIt = parentChildrens.find(parentEntity); parentIt != parentChildrens.end()) {
-            return std::make_optional<std::reference_wrapper<const std::unordered_set<Entity>>>(std::reference_wrapper<const std::unordered_set<Entity>>(parentIt->second));
         }
         return std::nullopt;
     }
 
-    [[nodiscard]] constexpr auto hasParent(const Entity childEntity) const noexcept -> bool {
-        return childrenParent.contains(childEntity);
+    [[nodiscard]] constexpr auto get_all_components_types(const Entity entity) const noexcept -> const std::set<Type>& {
+        return entArch.at(entity)->types;
     }
 
-    [[nodiscard]] auto getParent(const Entity childEntity) const noexcept -> std::optional<Entity> {
-        if (auto childIt = childrenParent.find(childEntity); childIt != childrenParent.end()) {
-            return childIt->second;
+    void clear_without(const std::unordered_set<Entity>& without_entities) noexcept {
+        std::vector<Entity> remove_entities;
+        for (const auto entity: std::views::keys(entArch)) {
+            if (!without_entities.contains(entity)) {
+                remove_entities.emplace_back(entity);
+            }
+        }
+        for (const auto entity: remove_entities) {
+            delete_entity(entity);
+        }
+    }
+
+public:
+    template <typename ComponentType>
+    void append_children_rec_down(const Entity parent_entity) noexcept {
+        if (auto opt_children = get_children(parent_entity)) {
+            for (auto child_entity: opt_children.value()) {
+                if (is_entity_exist(child_entity)) {
+                    if (!has_components(child_entity, {typeid(ComponentType).hash_code()})) {
+                        add_components(child_entity, {typeid(ComponentType).hash_code(), std::make_unique<ComponentType>()});
+                    }
+                    append_children_rec_down<ComponentType>(child_entity);
+                }
+            }
+        }
+    }
+
+    template <typename ComponentType>
+    void append_children_rec_up(const Entity parent_entity) noexcept {
+        if (has_components(parent_entity, {typeid(ComponentType).hash_code()})) {
+            if (auto opt_children = get_children(parent_entity)) {
+                for (auto child_entity: opt_children.value()) {
+                    if (is_entity_exist(child_entity)) {
+                        if (!has_components(child_entity, {typeid(ComponentType).hash_code()})) {
+                            add_components(child_entity, {typeid(ComponentType).hash_code(), std::make_unique<ComponentType>()});
+                        }
+                        append_children_rec_down<ComponentType>(child_entity);
+                    }
+                }
+            }
+            return;
+        }
+
+        if (auto opt_parent = get_parent(parent_entity)) {
+            append_children_rec_up<ComponentType>(opt_parent.value());
+        }
+    }
+
+public:
+    void append_children(const Entity parent_entity, const std::vector<Entity>& children_entities) noexcept {
+        if (!entArch.contains(parent_entity)) {
+            std::cerr << "Registry::append_children(): Impossible d'ajouter sur une entite inexistante: Entity[" << parent_entity << "]" << std::endl;
+            return;
+        }
+
+        std::unordered_set<Entity> new_children_entities;
+
+        for (const auto child_entity: children_entities) {
+            if (is_entity_exist(child_entity)) {
+                if (has_components(child_entity, {typeid(Parent).hash_code()})) {
+                    std::println("Children: Tu ne peux pas avoir deux parents Billy[{}]", child_entity);
+                } else if (parent_entity == child_entity) {
+                    std::println("Children: Impossible d'etre son propre pere");
+                } else {
+                    add_components(child_entity, {typeid(Parent).hash_code(), std::make_unique<Parent>(parent_entity)});
+                    new_children_entities.emplace(child_entity);
+                }
+            } else {
+                std::cerr << "Registry::append_children(): Impossible d'ajouter une entite enfant qui n'existe pas: Entity[" << child_entity << "]" << std::endl;
+            }
+        }
+
+        if (!new_children_entities.empty()) {
+            if (auto opt_children = get(parent_entity, typeid(Children).hash_code())) {
+                auto& children = static_cast<Children&>(*opt_children.value().get());
+                children.children_entities.insert(new_children_entities.begin(), new_children_entities.end());
+            } else {
+                add_components(parent_entity, {typeid(Children).hash_code(), std::make_unique<Children>(new_children_entities)});
+            }
+        }
+    }
+
+    void detach_children(const Entity parent_entity) noexcept {
+        if (auto opt_children = get(parent_entity, typeid(Children).hash_code())) {
+            for (const auto child_entity: static_cast<Children&>(*opt_children.value().get()).children_entities) {
+                remove_components(child_entity, {typeid(Parent).hash_code()});
+            }
+            remove_components(parent_entity, {typeid(Children).hash_code()});
+        }
+    }
+
+    void remove_parent(const Entity children_entity) noexcept {
+        if (auto opt_parent = get(children_entity, typeid(Parent).hash_code())) {
+            auto& parent = static_cast<Parent&>(*opt_parent.value().get());
+            if (auto opt_children = get(parent.parent_entity, typeid(Children).hash_code())) {
+                auto& children = static_cast<Children&>(*opt_children.value().get());
+                children.children_entities.erase(children_entity);
+                if (children.children_entities.empty()) {
+                    remove_components(parent.parent_entity, {typeid(Children).hash_code()});
+                }
+            }
+            remove_components(children_entity, {typeid(Parent).hash_code()});
+        }
+    }
+
+    [[nodiscard]] auto get_children(const Entity parent_entity) noexcept -> std::optional<std::unordered_set<Entity>> {
+        if (auto opt_children = get(parent_entity, typeid(Children).hash_code())) {
+            auto& children = static_cast<Children&>(*opt_children.value().get());
+            return children.children_entities;
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] auto get_parent(const Entity children_entity) noexcept -> std::optional<Entity> {
+        if (auto opt_parent = get(children_entity, typeid(Parent).hash_code())) {
+            auto& parent = static_cast<Parent&>(*opt_parent.value().get());
+            return parent.parent_entity;
         }
         return std::nullopt;
     }
 
 private:
     template <typename... Comps>
-    [[nodiscard]] constexpr auto query(const std::initializer_list<Type>& compFilterTypes, const std::initializer_list<Type>& excludeTypes) const noexcept -> const Query<Comps...> {
-        std::unordered_map<std::size_t, std::reference_wrapper<Archetype>> internal_archetypes;
-        if (compFilterTypes.size() > 0) {
-            query_with_components(internal_archetypes, compFilterTypes);
-        } else {
-            internal_archetypes.reserve(archs.size());
-            for (const auto& [archetype_id, archetype]: archs) {
-                internal_archetypes.emplace(archetype_id, *archetype);
+    [[nodiscard]] constexpr auto query(const std::initializer_list<Type>& filters, const std::initializer_list<Type>& excludes) noexcept -> const Query<Comps...> {
+        std::unordered_set<std::shared_ptr<Archetype>> internal_archetypes;
+
+        std::map<Type, bool> ordered_types;
+        for (const auto type: filters) {
+            ordered_types.emplace(type, false);
+        }
+        for (const auto type: excludes) {
+            ordered_types.insert_or_assign(type, true);
+        }
+
+        if (filters.size() == 0) {
+            if (!archetype_root->entity_components.empty()) {
+                internal_archetypes.emplace(archetype_root);
             }
         }
-        if (excludeTypes.size() > 0) {
-            query_without_components(internal_archetypes, excludeTypes);
-        }
-        return {std::move(internal_archetypes)};
+
+        query_rec(ordered_types, filters.size(), 1, ordered_types.begin(), archetype_root, 0, internal_archetypes);
+
+        return Query<Comps...>(internal_archetypes);
     }
 
 private:
-    constexpr auto query_with_components(std::unordered_map<std::size_t, std::reference_wrapper<Archetype>>& internal_archetypes, const std::initializer_list<Type>& compTypes) const noexcept -> void {
-        std::size_t i = 0;
-        for (const auto& component_type: compTypes) {
-            if (i == 0) {
-                if (auto archsByTypeIt = archsByType.find(component_type); archsByTypeIt != archsByType.end()) {
-                    for (const auto& archetype_id: archsByTypeIt->second) {
-                        internal_archetypes.emplace(archetype_id, *archs.at(archetype_id));
-                    }
-                } else {
-                    internal_archetypes.clear();
-                    return;
-                }
-                i++;
-            } else {
-                if (auto archsByTypeIt = archsByType.find(component_type); archsByTypeIt != archsByType.end()) {
-                    const auto& other_archetypes_id_set = archsByTypeIt->second;
-                    std::vector<std::size_t> to_erase;
-                    for (const auto& [archetype_id, _]: internal_archetypes) {
-                        if (!other_archetypes_id_set.contains(archetype_id)) {
-                            to_erase.emplace_back(archetype_id);
+    constexpr void query_rec(const std::map<Type, bool>& ordered_types, const std::size_t nb_types, const std::size_t current_nb_types, std::map<Type, bool>::iterator current_type_it, const std::shared_ptr<Archetype>& current_archetype, const Type filter, std::unordered_set<std::shared_ptr<Archetype>>& internal_archetypes) const noexcept {
+        for (const auto& [next_type, next_archetype]: current_archetype->next_archetypes) {
+            if (next_type < filter) {
+                continue;
+            }
+
+            if (current_type_it != ordered_types.end()) {
+                if (!current_type_it->second) {
+                    if (next_type > current_type_it->first) {
+                        break;
+                    } else if (next_type < current_type_it->first) {
+                        query_rec(ordered_types, nb_types, current_nb_types, current_type_it, next_archetype, 0, internal_archetypes);
+                        continue;
+                    } else {
+                        if (current_nb_types >= nb_types && !next_archetype->entity_components.empty()) {
+                            internal_archetypes.emplace(next_archetype);
                         }
-                    }
-                    for (const auto& archetype_id: to_erase) {
-                        internal_archetypes.erase(archetype_id);
+                        query_rec(ordered_types, nb_types, current_nb_types + 1, std::next(current_type_it), next_archetype, 0, internal_archetypes);
                     }
                 } else {
-                    internal_archetypes.clear();
-                    return;
-                }
-            }
-        }
-    }
-
-    constexpr auto query_without_components(std::unordered_map<std::size_t, std::reference_wrapper<Archetype>>& internal_archetypes, const std::initializer_list<Type>& component_types) const noexcept -> void {
-        for (const auto& component_type: component_types) {
-            if (auto archsByTypeIt = archsByType.find(component_type); archsByTypeIt != archsByType.end()) {
-                for (const auto& archetype_id: archsByTypeIt->second) {
-                    if (internal_archetypes.contains(archetype_id)) {
-                        internal_archetypes.erase(archetype_id);
+                    if (next_type < current_type_it->first) {
+                        if (current_nb_types > nb_types && !next_archetype->entity_components.empty()) {
+                            internal_archetypes.emplace(next_archetype);
+                        }
+                        query_rec(ordered_types, nb_types, current_nb_types, current_type_it, next_archetype, 0, internal_archetypes);
+                        continue;
+                    } else if (next_type > current_type_it->first) {
+                        query_rec(ordered_types, nb_types, current_nb_types, std::next(current_type_it), current_archetype, current_type_it->first, internal_archetypes);
+                        break;
+                    } else {
+                        current_type_it++;
+                        continue;
                     }
                 }
-            }
-        }
-    }
-
-    auto filterArchsByType(const Type component_type, std::unordered_map<std::size_t, std::reference_wrapper<Archetype>>& compatible_archetypes) noexcept -> void {
-        std::unordered_map<std::size_t, std::reference_wrapper<Archetype>> newArchs;
-        if (auto archsByTypeIt = archsByType.find(component_type); archsByTypeIt != archsByType.end()) {
-            for (const auto& archetype_id: archsByTypeIt->second) {
-                if (compatible_archetypes.contains(archetype_id)) {
-                    newArchs.emplace(archetype_id, compatible_archetypes.at(archetype_id));
+            } else {
+                if (current_nb_types >= nb_types && !next_archetype->entity_components.empty()) {
+                    internal_archetypes.emplace(next_archetype);
                 }
+                query_rec(ordered_types, nb_types, current_nb_types, current_type_it, next_archetype, 0, internal_archetypes);
             }
-        }
-        compatible_archetypes = newArchs;
-    }
-
-private:
-    auto emplaceArchByType(const Type component_type, const std::size_t archetype_id) noexcept -> void {
-        if (auto archsByTypeIt = archsByType.find(component_type); archsByTypeIt != archsByType.end()) {
-            archsByTypeIt->second.emplace(archetype_id);
-        } else {
-            archsByType.emplace(
-                std::piecewise_construct,
-                std::forward_as_tuple(component_type),
-                std::forward_as_tuple(std::initializer_list<std::size_t>{archetype_id})
-            );
-        }
-    }
-
-    auto removeOldArchIfEmpty(const std::size_t old_archetype_id) noexcept -> void {
-        const auto& old_archetype = archs.at(old_archetype_id);
-        if (old_archetype->empty() && old_archetype_id != 0) {
-            for (const auto& [old_type, _]: old_archetype->pools) {
-                archsByType.at(old_type).erase(old_archetype_id);
-            }
-            archs.erase(old_archetype_id);
         }
     }
 
 private:
-    Entity lastEnt = 1;
-    std::vector<Entity> entTokens;
-    std::size_t last_archetype_token = 1;
-    std::vector<std::size_t> archetype_tokens;
-    std::unordered_map<std::size_t, std::unique_ptr<Archetype>> archs;
-    std::unordered_map<Entity, std::size_t> entArch;
-    std::unordered_map<Type, std::unordered_set<std::size_t>> archsByType;
-    std::unordered_map<Entity, std::unordered_set<Entity>> parentChildrens;
-    std::unordered_map<Entity, Entity> childrenParent;
+    constexpr void create_branch(const std::set<Type>& ordered_types, const Entity entity) noexcept {
+        auto current_archetype = archetype_root;
+        for (const auto type: ordered_types) {
+            if (auto next_archetypes_it = current_archetype->next_archetypes.find(type); next_archetypes_it != current_archetype->next_archetypes.end()) {
+                current_archetype = next_archetypes_it->second;
+            } else {
+                current_archetype = current_archetype->next_archetypes.emplace(
+                    type,
+                    std::make_shared<Archetype>(current_archetype, type)
+                ).first->second;
+            }
+        }
+        entArch.at(entity) = current_archetype;
+    }
 
-    // std::unordered_map<Type, std::unique_ptr<IComponentPool>> components;
+    constexpr void graph_readjustement(const std::shared_ptr<Archetype>& old_archetype) noexcept {
+        auto remove_old_rec = old_archetype;
+        while (!remove_old_rec->previous_archetype.expired() && remove_old_rec->entity_components.empty() && remove_old_rec->next_archetypes.empty()) {
+            remove_old_rec
+                ->previous_archetype.lock()
+                ->next_archetypes.erase(
+                    *std::prev(remove_old_rec->types.end())
+                );
+            remove_old_rec = remove_old_rec->previous_archetype.lock();
+        }
+    }
+
+private:
+    Entity last_entity_token = 1;
+    std::vector<Entity> entity_tokens;
+    std::unordered_map<Entity, std::shared_ptr<Archetype>> entArch;
+    std::shared_ptr<Archetype> archetype_root = std::make_shared<Archetype>();
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
 
-class World;
+static void registry_message_callback_create_entity(Registry& registry, const Entity entity, std::pair<Type, std::unique_ptr<IComponent>>&&, const std::vector<Type>&, const std::vector<Entity>&) {
+    registry.create_entity(entity);
+}
 
-class LateUpgrade final {
-friend class World;
-private:
-    LateUpgrade() = default;
+static void registry_message_callback_add_components(Registry& registry, const Entity entity, std::pair<Type, std::unique_ptr<IComponent>>&& components, const std::vector<Type>&, const std::vector<Entity>&) {
+    registry.add_components(entity, std::move(components));
+}
 
-private:
-    auto newEnt(const Entity ent, std::initializer_list<std::pair<const Type, std::shared_ptr<IComponent>>>&& newList) noexcept -> Entity {
-        const std::unique_lock<std::mutex> lock(mtx);
-        addEnts.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(ent),
-            std::forward_as_tuple(std::move(newList))
-        );
-        return ent;
-    }
+static void registry_message_callback_remove_components(Registry& registry, const Entity entity, std::pair<Type, std::unique_ptr<IComponent>>&&, const std::vector<Type>& new_types, const std::vector<Entity>&) {
+    registry.remove_components(entity, new_types);
+}
 
-    void add(const Registry& reg, const Entity ent, std::initializer_list<std::tuple<const Type, const char*, std::shared_ptr<IComponent>>>&& newList) noexcept {
-        const std::unique_lock<std::mutex> lock(mtx);
-        auto addCompsIt = addComps.find(ent);
-        if (addCompsIt != addComps.end()) {
-            for (auto&& [type, name, component]: newList) {
-                if (!addCompsIt->second.contains(type)) {
-                    addCompsIt->second.emplace(
-                        std::piecewise_construct,
-                        std::forward_as_tuple(std::move(type)),
-                        std::forward_as_tuple(std::move(component))
-                    );
-                } else {
-                    std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (dans addComp)", name);
-                }
-            }
-        } else {
-            addCompsIt = addComps.emplace(
-                std::piecewise_construct,
-                std::forward_as_tuple(ent),
-                std::forward_as_tuple()
-            ).first;
-            for (auto&& [type, name, component]: newList) {
-                if (!reg.has(ent, {type})) {
-                    if (!addCompsIt->second.contains(type)) {
-                        addCompsIt->second.emplace(
-                            std::piecewise_construct,
-                            std::forward_as_tuple(std::move(type)),
-                            std::forward_as_tuple(std::move(component))
-                        );
-                    } else {
-                        std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (en double sur l'ajout dans addComp)", name);
-                    }
-                } else {
-                    std::println("LateUpgrade: No Add Sur Comp: Le Composant {} existe deja (sur l'entite)", name);
-                }
-            }
-        }
-    }
+static void registry_message_callback_append_children(Registry& registry, const Entity entity, std::pair<Type, std::unique_ptr<IComponent>>&&, const std::vector<Type>&, const std::vector<Entity>& children_entities) {
+    registry.append_children(entity, children_entities);
+    registry.append_children_rec_up<IsInactive>(entity);
+    registry.append_children_rec_up<DontDestroyOnLoad>(entity);
+}
 
-    void remove(const Entity ent, const Type type) noexcept {
-        const std::unique_lock<std::mutex> lock(mtx);
-        if (!delEnts.contains(ent)) {
-            auto addEntsIt = addEnts.find(ent);
-            if (addEntsIt == addEnts.end() || !addEntsIt->second.contains(type)) {
-                auto addCompsIt = addComps.find(ent);
-                if (addCompsIt == addComps.end() || !addCompsIt->second.contains(type)) {
-                    auto delCompsIt = delComps.find(ent);
-                    if (delCompsIt == delComps.end()) {
-                        delComps.emplace(
-                            std::piecewise_construct,
-                            std::forward_as_tuple(ent),
-                            std::forward_as_tuple(
-                                std::initializer_list<Type>{
-                                    type
-                                }
-                            )
-                        );
-                    } else {
-                        delCompsIt->second.emplace(
-                            type
-                        );
-                    }
-                } else {
-                    addCompsIt->second.erase(type);
-                }
-            } else {
-                addEntsIt->second.erase(type);
-            }
-        }
-    }
-
-    void appendChildren(const Entity parentEnt, const std::vector<Entity>& childrenEnt) {
-        const std::unique_lock<std::mutex> lock(mtx);
-        if (auto addParentChildrenIt = addParentChildren.find(parentEnt); addParentChildrenIt != addParentChildren.end()) {
-            for (const auto childEnt: childrenEnt) {
-                addParentChildrenIt->second.emplace(childEnt);
-            }
-        } else {
-            addParentChildren.emplace(
-                std::piecewise_construct,
-                std::forward_as_tuple(parentEnt),
-                std::forward_as_tuple(childrenEnt.begin(), childrenEnt.end())
-            );
-        }
-    }
-
-    void set_active(const Entity entity) {
-        setActiveEnts.emplace(entity);
-    }
-
-    void set_inactive(const Entity entity) {
-        setInactiveEnts.emplace(entity);
-    }
-
-    void add_dont_destroy_on_load(const Entity entity) {
-        addDontDestroyOnLoadEnts.emplace(entity);
-    }
-
-    void destroyChildRec(Registry& registry, const Entity parent_entity) noexcept {
-        if (registry.exist(parent_entity)) {
-            if (auto childrenOpt = registry.getChildren(parent_entity)) {
-                const std::unordered_set<Entity> copyChildrenSet = childrenOpt.value().get();
-                for (const auto childEnt: copyChildrenSet) {
-                    destroyChildRec(registry, childEnt);
-                }
-            }
-            registry.destroy(parent_entity);
-        }
-    }
-
-    void destroy(const Entity entity) noexcept {
-        const std::unique_lock<std::mutex> lock(mtx);
-        delEnts.emplace(entity);
-    }
-
-    void load_scene(std::function<void(SceneSystem, World&)>&& newScene) noexcept {
-        needClean = true;
-        newSceneFunc = std::move(newScene);
-    }
-
-private:
-    void setActiveRec(Registry& registry, const Entity entity) {
-        if (registry.has(entity, {typeid(IsInactive).hash_code()})) {
-            registry.remove(entity, typeid(IsInactive).hash_code());
-            if (auto opt_children = registry.getChildren(entity)) {
-                for (auto child_entity: opt_children.value().get()) {
-                    setActiveRec(registry, child_entity);
-                }
-            }
-        }
-    }
-
-    void setInactiveRec(Registry& registry, const Entity entity) {
-        if (!registry.has(entity, {typeid(IsInactive).hash_code()})) {
-            registry.add(entity, std::pair(typeid(IsInactive).hash_code(), std::make_shared<IsInactive>()));
-            if (auto opt_children = registry.getChildren(entity)) {
-                for (auto childEnt: opt_children.value().get()) {
+static void setInactiveRec(Registry& registry, const Entity entity) {
+    if (registry.is_entity_exist(entity)) {
+        if (!registry.has_components(entity, {typeid(IsInactive).hash_code()})) {
+            registry.add_components(entity, {typeid(IsInactive).hash_code(), std::make_unique<IsInactive>()});
+            if (auto opt_children = registry.get_children(entity)) {
+                for (auto childEnt: opt_children.value()) {
                     setInactiveRec(registry, childEnt);
                 }
             }
         }
     }
+}
 
-    void addDontDetroyOnLoadRec(Registry& registry, const Entity entity) {
-        if (!registry.has(entity, {typeid(DontDestroyOnLoad).hash_code()})) {
-            registry.add(entity, std::pair(typeid(DontDestroyOnLoad).hash_code(), std::make_shared<DontDestroyOnLoad>()));
-            if (auto opt_children = registry.getChildren(entity)) {
-                for (auto child_entity: opt_children.value().get()) {
-                    addDontDetroyOnLoadRec(registry, child_entity);
+static void registry_message_callback_set_inactive(Registry& registry, const Entity entity, std::pair<Type, std::unique_ptr<IComponent>>&&, const std::vector<Type>&, const std::vector<Entity>&) {
+    setInactiveRec(registry, entity);
+}
+
+static void setActiveRec(Registry& registry, const Entity entity) {
+    if (registry.is_entity_exist(entity)) {
+        if (registry.has_components(entity, {typeid(IsInactive).hash_code()})) {
+            registry.remove_components(entity, {typeid(IsInactive).hash_code()});
+            if (auto opt_children = registry.get_children(entity)) {
+                for (auto child_entity: opt_children.value()) {
+                    setActiveRec(registry, child_entity);
                 }
             }
         }
+    }
+}
+
+static void registry_message_callback_set_active(Registry& registry, const Entity entity, std::pair<Type, std::unique_ptr<IComponent>>&&, const std::vector<Type>&, const std::vector<Entity>&) {
+    setActiveRec(registry, entity);
+}
+
+static void addDontDestroyOnLoadRec(Registry& registry, const Entity entity) {
+    if (registry.is_entity_exist(entity)) {
+        if (!registry.has_components(entity, {typeid(DontDestroyOnLoad).hash_code()})) {
+            registry.add_components(entity, {typeid(DontDestroyOnLoad).hash_code(), std::make_unique<DontDestroyOnLoad>()});
+            if (auto opt_children = registry.get_children(entity)) {
+                for (auto child_entity: opt_children.value()) {
+                    addDontDestroyOnLoadRec(registry, child_entity);
+                }
+            }
+        }
+    }
+}
+
+static void registry_message_callback_add_font_destroy_on_load(Registry& registry, const Entity entity, std::pair<Type, std::unique_ptr<IComponent>>&&, const std::vector<Type>&, const std::vector<Entity>&) {
+    addDontDestroyOnLoadRec(registry, entity);
+}
+
+static void destroyChildRec(Registry& registry, const Entity parent_entity) noexcept {
+    if (registry.is_entity_exist(parent_entity)) {
+        if (auto childrenOpt = registry.get_children(parent_entity)) {
+            for (const auto childEnt: childrenOpt.value()) {
+                destroyChildRec(registry, childEnt);
+            }
+        }
+        registry.delete_entity(parent_entity);
+    }
+}
+
+static void registry_message_callback_delete_entity(Registry& registry, const Entity entity, std::pair<Type, std::unique_ptr<IComponent>>&&, const std::vector<Type>&, const std::vector<Entity>&) {
+    destroyChildRec(registry, entity);
+}
+
+class World;
+class Sys;
+
+class [[nodiscard]] LateUpgrade final {
+friend class World;
+public:
+    using RegistryMessageIndex = std::size_t;
+
+private:
+    LateUpgrade() = default;
+
+private:
+    void create_entity(const Entity entity) noexcept {
+        const std::unique_lock<std::mutex> lock(mtx);
+        if (add_entities.contains(entity)) {
+            std::println("ZerEngine::LateUpgrade::create_entity() - Impossible de creer une deuxieme entites avec un numero deja existant");
+            return;
+        }
+        add_entities.emplace(entity);
+        registry_messages.emplace_back(
+            RegistryMessageType::CREATE_ENTITY,
+            registry_message_callback_create_entity,
+            entity
+        );
+    }
+
+    void add_components(const Registry& registry, const Entity entity, std::pair<Type, std::unique_ptr<IComponent>>&& component, const char* component_name) noexcept {
+        const std::unique_lock<std::mutex> lock(mtx);
+        if (registry.has_components(entity, {component.first})) {
+            std::println("ZerEngine::LateUpgrade::add_components() - Impossible d'ajouter deux fois un composant sur une entite dans les registres: entity[{}], composant[{}]", entity, component_name);
+            return;
+        }
+        if (delEnts.contains(entity)) {
+            std::println("ZerEngine::LateUpgrade::add_components() - Impossible d'ajouter un composant sur une entite qui vient d'etre supprimer: entity[{}], composant[{}]", entity, component_name);
+            return;
+        }
+        if (auto addCompsIt = addComps.find(entity); addCompsIt != addComps.end()) {
+            if (addCompsIt->second.contains(component.first)) {
+                std::println("ZerEngine::LateUpgrade::add_components() - Impossible d'ajouter deux fois un composant sur une entite dans le late upgrade: entity[{}], composant[{}]", entity, component_name);
+                return;
+            }
+            addCompsIt->second.emplace(component.first, registry_messages.size());
+        } else {
+            addComps.emplace(
+                std::piecewise_construct,
+                std::forward_as_tuple(entity),
+                std::forward_as_tuple(std::unordered_map<Type, RegistryMessageIndex>({{component.first, registry_messages.size()}}))
+            );
+        }
+        registry_messages.emplace_back(
+            RegistryMessageType::ADD_COMPONENT,
+            registry_message_callback_add_components,
+            entity,
+            std::move(std::pair<Type, std::unique_ptr<IComponent>>{std::move(component)})
+        );
+    }
+
+    void remove_components(const Registry& registry, const Entity entity, const std::vector<std::pair<const char*, Type>>& components) noexcept {
+        const std::unique_lock<std::mutex> lock(mtx);
+        for (const auto& [component_name, type]: components) {
+            if (!registry.has_components(entity, {type})) {
+                std::println("ZerEngine::LateUpgrade::remove_components() - Impossible de supprimer deux fois un composant sur une entite dans les registres: entity[{}], composant[{}]", entity, component_name);
+                return;
+            }
+            if (delEnts.contains(entity)) {
+                std::println("ZerEngine::LateUpgrade::remove_components() - Impossible de supprimer un composant sur une entite qui vient d'etre supprimer: entity[{}], composant[{}]", entity, component_name);
+                return;
+            }
+            if (auto delCompsIt = delComps.find(entity); delCompsIt != delComps.end()) {
+                if (delCompsIt->second.contains(type)) {
+                    std::println("ZerEngine::LateUpgrade::remove_components() - Impossible de supprimer deux fois un composant sur une entite dans le late upgrade: entity[{}], composant[{}]", entity, component_name);
+                    return;
+                }
+                delCompsIt->second.emplace(type);
+            } else {
+                delComps.emplace(
+                    std::piecewise_construct,
+                    std::forward_as_tuple(entity),
+                    std::forward_as_tuple(std::initializer_list<Type>{type})
+                );
+            }
+            registry_messages.emplace_back(
+                RegistryMessageType::REMOVE_COMPONENT,
+                registry_message_callback_remove_components,
+                entity,
+                std::move(std::vector<Type>{type})
+            );
+        }
+    }
+
+    void delete_entity(const Registry& registry, const Entity entity) noexcept {
+        const std::unique_lock<std::mutex> lock(mtx);
+        if (delEnts.contains(entity)) {
+            std::println("ZerEngine::LateUpgrade::delete_entity() - Impossible de supprimer deux fois la meme entite dans le late upgrade: entity[{}]", entity);
+            return;
+        }
+        // addComps.erase(entity);
+        // delComps.erase(entity);
+        // setInactiveEnts.erase(entity);
+        // setActiveEnts.erase(entity);
+        // addDontDestroyOnLoadEnts.erase(entity);
+        // addParentChildren.erase(entity);
+        // for (auto& [_, children]: addParentChildren) {
+        //     children.erase(entity);
+        // }
+        delEnts.emplace(entity);
+        delComps.emplace(entity, registry.get_all_components_types(entity) | std::ranges::to<std::unordered_set<Type>>());
+        registry_messages.emplace_back(
+            RegistryMessageType::DELETE_ENTITY,
+            registry_message_callback_delete_entity,
+            entity
+        );
+    }
+
+    void append_children(const Registry& registry, const Entity parent_entity, const std::vector<Entity>& children_entity) {
+        const std::unique_lock<std::mutex> lock(mtx);
+        auto new_children_entity = children_entity;
+        if (delEnts.contains(parent_entity)) {
+            std::println("ZerEngine::LateUpgrade::append_children() - Impossible de faire une hierarchie sur une entite supprime: entity[{}]", parent_entity);
+            return;
+        }
+        std::size_t i = 0;
+        for (const auto child_entity: children_entity) {
+            if (delEnts.contains(child_entity)) {
+                std::println("ZerEngine::LateUpgrade::append_children() - Impossible de faire une hierarchie avec une entite supprime: entity[{}]", child_entity);
+                new_children_entity.erase(new_children_entity.begin() + i);
+            }
+            i++;
+        }
+        if (addParentChildren.contains(parent_entity)) {
+            addParentChildren.at(parent_entity).insert(new_children_entity.begin(), new_children_entity.end());
+        } else {
+            addParentChildren.emplace(
+                std::piecewise_construct,
+                std::forward_as_tuple(parent_entity),
+                std::forward_as_tuple(std::unordered_set<Entity>(new_children_entity.begin(), new_children_entity.end()))
+            );
+        }
+        registry_messages.emplace_back(
+            RegistryMessageType::APPEND_CHILDREN,
+            registry_message_callback_append_children,
+            parent_entity,
+            new_children_entity
+        );
+    }
+
+    void set_active(const Entity entity) {
+        if (setActiveEnts.contains(entity)) {
+            std::cerr << "ZerEngine::LateUpgrade::set_active() - Impossible de rendre 2 fois actif une entité: entity[" << entity << "]" << std::endl;
+            return;
+        }
+        if (delEnts.contains(entity)) {
+            std::println("ZerEngine::LateUpgrade::set_active() - Impossible de mettre une entite IsActive: entity[{}]", entity);
+            return;
+        }
+        setActiveEnts.emplace(entity);
+        registry_messages.emplace_back(
+            RegistryMessageType::SET_ACTIVE,
+            registry_message_callback_set_active,
+            entity
+        );
+    }
+
+    void set_inactive(const Entity entity) {
+        if (setInactiveEnts.contains(entity)) {
+            std::cerr << "ZerEngine::LateUpgrade::set_inactive() - Impossible de rendre 2 fois inactif une entité: entity[" << entity << "]" << std::endl;
+            return;
+        }
+        if (delEnts.contains(entity)) {
+            std::println("ZerEngine::LateUpgrade::set_inactive() - Impossible de mettre une entite IsInactive: entity[{}]", entity);
+            return;
+        }
+        setInactiveEnts.emplace(entity);
+        registry_messages.emplace_back(
+            RegistryMessageType::SET_INACTIVE,
+            registry_message_callback_set_inactive,
+            entity
+        );
+    }
+
+    void add_dont_destroy_on_load(const Entity entity) {
+        if (addDontDestroyOnLoadEnts.contains(entity)) {
+            std::cerr << "ZerEngine::LateUpgrade::add_dont_destroy_on_load() - Impossible de mettre dont destroy on load sur une entité: entity[" << entity << "]" << std::endl;
+            return;
+        }
+        if (delEnts.contains(entity)) {
+            std::println("ZerEngine::LateUpgrade::add_dont_destroy_on_load() - Impossible de mettre une entite DontDestroyOnLoad: entity[{}]", entity);
+            return;
+        }
+        addDontDestroyOnLoadEnts.emplace(entity);
+        registry_messages.emplace_back(
+            RegistryMessageType::ADD_DONT_DESTROY_ON_LOAD,
+            registry_message_callback_add_font_destroy_on_load,
+            entity
+        );
+    }
+
+    void load_scene(void(*const new_scene)(SceneSystem, World&)) noexcept {
+        scene_messages.emplace_back(new_scene);
+    }
+
+    void load_scene_internal(World& world, Registry& registry, void(*const new_scene)(SceneSystem, World&)) noexcept {
+        std::unordered_set<Entity> dont_destroy_entities;
+        for (auto [dont_destroy_entity]: registry.query({typeid(DontDestroyOnLoad).hash_code()}, {})) {
+            dont_destroy_entities.emplace(dont_destroy_entity);
+        }
+        registry.clear_without(dont_destroy_entities);
+        new_scene({}, world);
     }
 
 private:
-    void upgrade(World& world, Registry& reg) noexcept {
-        for (auto&& [entity, components]: addEnts) {
-            reg.newEnt(entity, std::move(components));
-        }
-        addEnts.clear();
+    void upgrade(World& world, Registry& registry, Sys& sys) noexcept {
+        for (auto&& [callback, entity, components, component_types, children_entities, message_type]: registry_messages) {
+            switch (message_type) {
+                case RegistryMessageType::REMOVE_COMPONENT:
+                    for (const auto remove_component_type: delComps.at(entity)) {
+                        upgrade_hook_remove_component(world, sys, entity, remove_component_type);
+                    }
+                    break;
+                case RegistryMessageType::DELETE_ENTITY:
+                    for (const auto type: delComps.at(entity)) {
+                        upgrade_hook_remove_component(world, sys, entity, type);
+                        upgrade_hook_delete_entity_with_component(world, sys, entity, type);
+                    }
+                    break;
+                default: break;
+            }
 
-        for (const auto& [ent, types]: delComps) {
-            for (const auto& type: types) {
-                reg.remove(ent, type);
+            callback(registry, entity, std::move(components), component_types, children_entities);
+
+            switch (message_type) {
+                case RegistryMessageType::ADD_COMPONENT:
+                    if (add_entities.contains(entity)) {
+                        for (const auto [add_component_type, _]: addComps.at(entity)) {
+                            upgrade_hook_create_entity_with_component(world, sys, entity, add_component_type);
+                        }
+                    } else {
+                        for (const auto [add_component_type, _]: addComps.at(entity)) {
+                            upgrade_hook_add_component(world, sys, entity, add_component_type);
+                        }
+                    }
+                    break;
+                default: break;
             }
         }
 
-        for (auto&& [entity, components]: addComps) {
-            for (auto&& component: components) {
-                reg.add(entity, std::move(component));
-            }
-        }
+        add_entities.clear();
         addComps.clear();
-
-        for (const auto& [parent_ent, children_ents]: addParentChildren) {
-            reg.appendChildren(parent_ent, children_ents);
-        }
-
-        for (const auto ent: setInactiveEnts) {
-            setInactiveRec(reg, ent);
-        }
-
-        for (const auto ent: addDontDestroyOnLoadEnts) {
-            addDontDetroyOnLoadRec(reg, ent);
-        }
-
-        for (const Entity ent: delEnts) {
-            destroyChildRec(reg, ent);
-        }
-
-        for (const auto ent: setActiveEnts) {
-            setActiveRec(reg, ent);
-        }
-
-        delEnts.clear();
         delComps.clear();
-        setActiveEnts.clear();
-        setInactiveEnts.clear();
-        addDontDestroyOnLoadEnts.clear();
+        delEnts.clear();
         addParentChildren.clear();
+        setInactiveEnts.clear();
+        setActiveEnts.clear();
+        addDontDestroyOnLoadEnts.clear();
 
-        if (needClean) {
-            needClean = false;
-            std::unordered_map<Entity, std::unordered_set<Entity>> dontDestroyesHierarchies;
-            for (auto [dontDestroyEnt]: reg.query({typeid(DontDestroyOnLoad).hash_code()}, {})) {
-                const std::unique_ptr<Archetype>& arch = reg.archs.at(reg.entArch.at(dontDestroyEnt));
-                std::unordered_map<Type, std::shared_ptr<IComponent>> comps;
-                for (auto& [type, component_pool]: arch->pools) {
-                    if (component_pool) {
-                        comps.emplace(type, component_pool->remove_entity(dontDestroyEnt));
-                    } else {
-                        comps.emplace(type, nullptr);
-                    }
-                }
-                dontDestroyes.emplace(dontDestroyEnt, comps);
-                if (auto childrenIt = reg.parentChildrens.find(dontDestroyEnt); childrenIt != reg.parentChildrens.end()) {
-                    dontDestroyesHierarchies.emplace(dontDestroyEnt, childrenIt->second);
-                }
-            }
-            reg.clean();
+        registry_messages.clear();
 
-            std::unordered_map<Entity, Entity> oldToNewEnts;
-            for (auto&& [entity, components]: dontDestroyes) {
-                auto newEntId = reg.getEntToken();
-                reg.newEnt(newEntId, std::move(components));
-                oldToNewEnts.emplace(entity, newEntId);
-            }
-            dontDestroyes.clear();
-
-            for (const auto& [parent_ent, children_ents]: dontDestroyesHierarchies) {
-                auto newEntId = oldToNewEnts.at(parent_ent);
-                std::unordered_set<Entity> newChildrens;
-                for (auto oldChildEnt: children_ents) {
-                    if (auto oldToNewEntsIt = oldToNewEnts.find(oldChildEnt); oldToNewEntsIt != oldToNewEnts.end()) {
-                        newChildrens.emplace(oldToNewEntsIt->second);
-                    } else {
-                        std::println("Probleme sur la purge des scenes");
-                    }
-                }
-                reg.appendChildren(newEntId, newChildrens);
-            }
-            newSceneFunc({}, world);
+        for (const auto& new_scene: scene_messages) {
+            load_scene_internal(world, registry, new_scene);
         }
+
+        scene_messages.clear();
     }
+
+    // Co-dependency: see after class Sys final;
+    constexpr void upgrade_hook_add_component(World&, Sys&, const Entity, const Type) noexcept;
+    constexpr void upgrade_hook_create_entity_with_component(World&, Sys&, const Entity, const Type) noexcept;
+    constexpr void upgrade_hook_remove_component(World&, Sys&, const Entity, const Type) noexcept;
+    constexpr void upgrade_hook_delete_entity_with_component(World&, Sys&, const Entity, const Type) noexcept;
 
 private:
     std::mutex mtx;
-    std::unordered_map<Entity, std::unordered_map<Type, std::shared_ptr<IComponent>>> addEnts;
-    std::unordered_map<Entity, std::unordered_map<Type, std::shared_ptr<IComponent>>> addComps;
+    std::unordered_set<Entity> add_entities;
+    std::unordered_map<Entity, std::unordered_map<Type, RegistryMessageIndex>> addComps;
     std::unordered_set<Entity> delEnts;
     std::unordered_map<Entity, std::unordered_set<Type>> delComps;
-    std::unordered_map<Entity, std::unordered_map<Type, std::shared_ptr<IComponent>>> dontDestroyes;
-
     std::unordered_map<Entity, std::unordered_set<Entity>> addParentChildren;
-
-    std::unordered_set<Entity> setActiveEnts;
     std::unordered_set<Entity> setInactiveEnts;
-
+    std::unordered_set<Entity> setActiveEnts;
     std::unordered_set<Entity> addDontDestroyOnLoadEnts;
 
-    bool needClean = false;
-    std::function<void(SceneSystem, World&)> newSceneFunc;
+    std::vector<RegistryMessage> registry_messages;
+
+    std::vector<void(*)(SceneSystem, World&)> scene_messages;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
 
-class TypeMap final {
+class [[nodiscard]] TypeMap final {
 friend class World;
 friend class ZerEngine;
 private:
@@ -1291,11 +1169,11 @@ private:
         type_map.emplace(type, std::move(resource));
     }
 
-    [[nodiscard]] constexpr auto get(const Type type) noexcept -> auto& {
+    [[nodiscard]] constexpr std::unique_ptr<IResource>& get(const Type type) noexcept {
         return type_map.at(type);
     }
 
-    [[nodiscard]] constexpr auto get(const Type type) const noexcept -> auto& {
+    [[nodiscard]] constexpr const std::unique_ptr<IResource>& get(const Type type) const noexcept {
         return type_map.at(type);
     }
 
@@ -1544,7 +1422,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////////
 
-class Sys final {
+class [[nodiscard]] Sys final {
 friend class World;
 friend class ZerEngine;
 private:
@@ -1603,9 +1481,57 @@ private:
         callback_systems.emplace_back(callback, entity);
     }
 
+    void add_on_add_component_hooks(const Type new_type, std::initializer_list<std::function<void(OnAddComponentHook, World&, const Entity)>>&& callback) noexcept {
+        if (auto on_add_component_hooks_it = on_add_component_hooks.find(new_type); on_add_component_hooks_it != on_add_component_hooks.end()) {
+            on_add_component_hooks_it->second.insert(on_add_component_hooks_it->second.end(), std::move(callback));
+        } else {
+            on_add_component_hooks.emplace(
+                std::piecewise_construct,
+                std::forward_as_tuple(new_type),
+                std::forward_as_tuple(std::move(callback))
+            );
+        }
+    }
+
+    void add_on_create_entity_hooks(const Type new_type, std::initializer_list<std::function<void(OnCreateEntityHook, World&, const Entity)>>&& callback) noexcept {
+        if (auto on_create_entity_hooks_it = on_create_entity_hooks.find(new_type); on_create_entity_hooks_it != on_create_entity_hooks.end()) {
+            on_create_entity_hooks_it->second.insert(on_create_entity_hooks_it->second.end(), std::move(callback));
+        } else {
+            on_create_entity_hooks.emplace(
+                std::piecewise_construct,
+                std::forward_as_tuple(new_type),
+                std::forward_as_tuple(std::move(callback))
+            );
+        }
+    }
+
+    void add_on_remove_component_hooks(const Type new_type, std::initializer_list<std::function<void(OnRemoveComponentHook, World&, const Entity)>>&& callback) noexcept {
+        if (auto on_remove_component_hooks_it = on_remove_component_hooks.find(new_type); on_remove_component_hooks_it != on_remove_component_hooks.end()) {
+            on_remove_component_hooks_it->second.insert(on_remove_component_hooks_it->second.end(), std::move(callback));
+        } else {
+            on_remove_component_hooks.emplace(
+                std::piecewise_construct,
+                std::forward_as_tuple(new_type),
+                std::forward_as_tuple(std::move(callback))
+            );
+        }
+    }
+
+    void add_on_delete_entity_hooks(const Type new_type, std::initializer_list<std::function<void(OnDeleteEntityHook, World&, const Entity)>>&& callback) noexcept {
+        if (auto on_delete_entity_hooks_it = on_delete_entity_hooks.find(new_type); on_delete_entity_hooks_it != on_delete_entity_hooks.end()) {
+            on_delete_entity_hooks_it->second.insert(on_delete_entity_hooks_it->second.end(), std::move(callback));
+        } else {
+            on_delete_entity_hooks.emplace(
+                std::piecewise_construct,
+                std::forward_as_tuple(new_type),
+                std::forward_as_tuple(std::move(callback))
+            );
+        }
+    }
+
     void start(World& world) const noexcept {
         for (const auto& func: startSystems) {
-            func(startSystem, world);
+            func(start_system, world);
         }
     }
 
@@ -1613,7 +1539,7 @@ private:
         for (const auto& mainFunc: mainSystems) {
             if (mainFunc.first == nullptr || mainFunc.first(world)) {
                 for (const auto& mainRow: mainFunc.second) {
-                    mainRow(mainSystem, world);
+                    mainRow(main_system, world);
                 }
             }
         }
@@ -1622,7 +1548,7 @@ private:
             if (funcs.first == nullptr || funcs.first(world)) {
                 if (!isUseMultithreading) {
                     for (auto& func: funcs.second) {
-                        func(threadedSystem, world);
+                        func(threaded_system, world);
                     }
                 } else {
                     threadpool.addTasks(funcs.second);
@@ -1640,7 +1566,7 @@ private:
         for (const auto& lateFunc: lateSystems) {
             if (lateFunc.first == nullptr || lateFunc.first(world)) {
                 for (const auto& lateRow: lateFunc.second) {
-                    lateRow(lateSystem, world);
+                    lateRow(late_system, world);
                 }
             }
         }
@@ -1651,13 +1577,13 @@ private:
             if (!set.tasks.empty()) {
                 if (!isUseMultithreading) {
                     for (auto& func: set.tasks) {
-                        func(threadedFixedSystem, world);
+                        func(threaded_fixed_system, world);
                     }
                 } else {
                     setTasks.insert(setTasks.end(), set.tasks.begin(), set.tasks.end());
                 }
             }
-            for (const auto& subSet: set.subSets) {
+            for (const auto& subSet: set.subSets) { // std::unordered_map<> on_create_entity_hooks;
                 runThreadedFixedSetRec(world, subSet, setTasks);
             }
         }
@@ -1667,7 +1593,7 @@ private:
         for (const auto& [condition, systems]: mainFixedSystems) {
             if (condition == nullptr || condition(world)) {
                 for (const auto& system: systems) {
-                    system(mainFixedSystem, world);
+                    system(main_fixed_system, world);
                 }
             }
         }
@@ -1698,7 +1624,7 @@ private:
         for (const auto& mainFunc: mainUnscaledFixedSystems) {
             if (mainFunc.first == nullptr || mainFunc.first(world)) {
                 for (const auto& mainRow: mainFunc.second) {
-                    mainRow(mainUnscaledFixedSystem, world);
+                    mainRow(main_unscaled_fixed_system, world);
                 }
             }
         }
@@ -1707,7 +1633,7 @@ private:
             if (funcs.first == nullptr || funcs.first(world)) {
                 if (!isUseMultithreading) {
                     for (auto& func: funcs.second) {
-                        func(threadedUnscaledFixedSystem, world);
+                        func(threaded_unscaled_fixed_system, world);
                     }
                 } else {
                     threadpool.addUnscaledFixedTasks(funcs.second);
@@ -1723,7 +1649,7 @@ private:
         for (const auto& lateFunc: lateUnscaledFixedSystems) {
             if (lateFunc.first == nullptr || lateFunc.first(world)) {
                 for (const auto& lateRow: lateFunc.second) {
-                    lateRow(lateUnscaledFixedSystem, world);
+                    lateRow(late_unscaled_fixed_system, world);
                 }
             }
         }
@@ -1748,13 +1674,53 @@ private:
     std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(LateFixedSystem, World&)>>>> lateFixedSystems;
     std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(LateUnscaledFixedSystem, World&)>>>> lateUnscaledFixedSystems;
     std::vector<std::pair<void(*)(CallbackSystem, World&, const Entity), Entity>> callback_systems;
+
+public:
+    std::unordered_map<Type, std::vector<std::function<void(OnAddComponentHook, World&, const Entity)>>> on_add_component_hooks;
+    std::unordered_map<Type, std::vector<std::function<void(OnCreateEntityHook, World&, const Entity)>>> on_create_entity_hooks;
+    std::unordered_map<Type, std::vector<std::function<void(OnRemoveComponentHook, World&, const Entity)>>> on_remove_component_hooks;
+    std::unordered_map<Type, std::vector<std::function<void(OnDeleteEntityHook, World&, const Entity)>>> on_delete_entity_hooks;
+
+private:
     ThreadPool threadpool;
     bool isUseMultithreading {true};
 };
 
+constexpr void LateUpgrade::upgrade_hook_add_component(World& world, Sys& sys, const Entity entity, const Type type) noexcept {
+    if (auto hooks_it = sys.on_add_component_hooks.find(type); hooks_it != sys.on_add_component_hooks.end()) {
+        for (const auto& callback: hooks_it->second) {
+            callback({}, world, entity);
+        }
+    }
+}
+
+constexpr void LateUpgrade::upgrade_hook_create_entity_with_component(World& world, Sys& sys, const Entity entity, const Type type) noexcept {
+    if (auto hooks_it = sys.on_create_entity_hooks.find(type); hooks_it != sys.on_create_entity_hooks.end()) {
+        for (const auto& callback: hooks_it->second) {
+            callback({}, world, entity);
+        }
+    }
+}
+
+constexpr void LateUpgrade::upgrade_hook_remove_component(World& world, Sys& sys, const Entity entity, const Type type) noexcept {
+    if (auto hooks_it = sys.on_remove_component_hooks.find(type); hooks_it != sys.on_remove_component_hooks.end()) {
+        for (const auto& callback: hooks_it->second) {
+            callback({}, world, entity);
+        }
+    }
+}
+
+constexpr void LateUpgrade::upgrade_hook_delete_entity_with_component(World& world, Sys& sys, const Entity entity, const Type type) noexcept {
+    if (auto hooks_it = sys.on_delete_entity_hooks.find(type); hooks_it != sys.on_delete_entity_hooks.end()) {
+        for (const auto& callback: hooks_it->second) {
+            callback({}, world, entity);
+        }
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////////
 
-class Time final: public IResource {
+class [[nodiscard]] Time final: public IResource {
 friend class ZerEngine;
 public:
     Time(const float& newFixedTimeStep = 0.02f) noexcept:
@@ -1853,7 +1819,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////////
 
-class World final {
+class [[nodiscard]] World final {
 friend class ZerEngine;
 private:
     World() noexcept:
@@ -1862,7 +1828,7 @@ private:
 
 public:
     [[nodiscard("La valeur de retour d'une commande Exist doit toujours etre evalue")]] auto is_entity_exists(const Entity entity) const noexcept -> bool {
-        return reg.exist(entity) || lateUpgrade.addEnts.contains(entity);
+        return (reg.is_entity_exist(entity) || lateUpgrade.add_entities.contains(entity)) && !lateUpgrade.delEnts.contains(entity);
     }
 
     template <typename T, typename... Ts> requires ((IsComponentConcept<T> && (IsComponentConcept<Ts> && ...)) && (!std::is_const_v<T> || (!std::is_const_v<Ts> || ...)))
@@ -1870,13 +1836,7 @@ public:
         if (!is_entity_exists(entity)) {
             return false;
         }
-        if (reg.has(entity, {typeid(T).hash_code()})) {
-            if constexpr (sizeof...(Ts) > 0) {
-                return has_components<Ts...>(entity);
-            }
-            return true;
-        }
-        if (auto addEntsIt = lateUpgrade.addEnts.find(entity); addEntsIt != lateUpgrade.addEnts.end() && addEntsIt->second.contains(typeid(T).hash_code())) {
+        if (reg.has_components(entity, {typeid(T).hash_code()})) {
             if constexpr (sizeof...(Ts) > 0) {
                 return has_components<Ts...>(entity);
             }
@@ -1893,71 +1853,18 @@ public:
 
     template <typename... Ts> requires (sizeof...(Ts) > 0 && ((IsComponentConcept<Ts> && !std::is_const_v<Ts>) && ...))
     [[nodiscard("La valeur de retour d'une commande Has doit toujours etre evalue")]] auto has_components(const Entity entity) const noexcept -> bool {
-        // if (!reg.exist(ent)) {
-        //     return false;
-        // } else if (reg.has(ent, {typeid(T).hash_code()})) {
-        //     if constexpr (sizeof...(Ts) > 0) {
-        //         return has<Ts...>(ent);
-        //     }
-        //     return true;
-        // }
-        // return false;
         return has_components_this_frame<Ts...>(entity);
     }
 
 private:
-    template <typename T>
-    [[nodiscard]] auto internal_get_components(const Entity entity) noexcept -> std::optional<std::reference_wrapper<T>> {
-        if (reg.has(entity, {typeid(T).hash_code()})) {
-            auto& component = reg.get(entity, typeid(T).hash_code());
-            return static_cast<T&>(component);
-        }
-        return std::nullopt;
-    }
-
-    template <typename T>
-    [[nodiscard]] auto internal_get_components(const Entity entity) const noexcept -> std::optional<const std::reference_wrapper<T>> {
-        if (reg.has(entity, {typeid(T).hash_code()})) {
-            auto& component = reg.get(entity, typeid(T).hash_code());
-            return static_cast<const T&>(component);
-        }
-        return std::nullopt;
-    }
-
-    template <typename T>
-    [[nodiscard]] auto internal_get_components_this_frame(const Entity entity) noexcept -> std::optional<std::reference_wrapper<T>> {
-        if (auto addEntsIt = lateUpgrade.addEnts.find(entity); addEntsIt != lateUpgrade.addEnts.end()) {
-            if (auto addEntsTypeIt = addEntsIt->second.find(typeid(T).hash_code()); addEntsTypeIt != addEntsIt->second.end()) {
-                return *static_cast<T*>(addEntsTypeIt->second.get());
-            }
-        }
+    [[nodiscard]] auto internal_get_components_this_frame(const Entity entity, const Type type) noexcept -> std::optional<std::reference_wrapper<std::unique_ptr<IComponent>>> {
         if (auto addCompsIt = lateUpgrade.addComps.find(entity); addCompsIt != lateUpgrade.addComps.end()) {
-            if (auto addCompsTypeIt = addCompsIt->second.find(typeid(T).hash_code()); addCompsTypeIt != addCompsIt->second.end()) {
-                return *static_cast<T*>(addCompsTypeIt->second.get());
+            if (addCompsIt->second.contains(type)) {
+                return lateUpgrade.registry_messages[addCompsIt->second.at(type)].component.second;
             }
         }
-        if (reg.has(entity, {typeid(T).hash_code()})) {
-            auto& component = reg.get(entity, typeid(T).hash_code());
-            return *static_cast<T*>(component.get());
-        }
-        return std::nullopt;
-    }
-
-    template <typename T>
-    [[nodiscard]] auto internal_get_components_this_frame(const Entity entity) const noexcept -> std::optional<const std::reference_wrapper<T>> {
-        if (auto addEntsIt = lateUpgrade.addEnts.find(entity); addEntsIt != lateUpgrade.addEnts.end()) {
-            if (auto addEntsTypeIt = addEntsIt->second.find(typeid(T).hash_code()); addEntsTypeIt != addEntsIt->second.end()) {
-                return static_cast<const T&>(addEntsTypeIt->second);
-            }
-        }
-        if (auto addCompsIt = lateUpgrade.addComps.find(entity); addCompsIt != lateUpgrade.addComps.end()) {
-            if (auto addCompsTypeIt = addCompsIt->second.find(typeid(T).hash_code()); addCompsTypeIt != addCompsIt->second.end()) {
-                return static_cast<const T&>(addCompsTypeIt->second);
-            }
-        }
-        if (reg.has(entity, {typeid(T).hash_code()})) {
-            auto& component = reg.get(entity, typeid(T).hash_code());
-            return static_cast<const T&>(component);
+        if (auto opt = reg.get(entity, type)) {
+            return opt.value();
         }
         return std::nullopt;
     }
@@ -1965,13 +1872,14 @@ private:
 public:
     template <typename T, typename... Ts> requires (IsComponentConcept<T> && IsNotEmptyConcept<T> && IsNotSameConcept<T, Ts...>)
     [[nodiscard("La valeur de retour d'une commande Get doit toujours etre recupere")]] auto get_components_this_frame(const Entity entity) noexcept -> std::optional<std::tuple<T&, Ts&...>> {
-        if (auto opt = internal_get_components_this_frame<T>(entity)) {
+        if (auto opt_component = internal_get_components_this_frame(entity, typeid(T).hash_code())) {
+            auto& component = *static_cast<T*>(opt_component.value().get().get());
             if constexpr (sizeof...(Ts) > 0) {
                 if (auto othOpt = get_components_this_frame<Ts...>(entity)) {
-                    return std::tuple_cat(std::forward_as_tuple(opt.value().get()), othOpt.value());
+                    return std::tuple_cat(std::forward_as_tuple(component), othOpt.value());
                 }
             } else {
-                return std::forward_as_tuple(opt.value().get());
+                return std::forward_as_tuple(component);
             }
         }
         return std::nullopt;
@@ -1979,66 +1887,17 @@ public:
 
     template <typename... Ts> requires (sizeof...(Ts) > 0 && ((IsComponentConcept<Ts> && IsNotEmptyConcept<Ts>) && ...) && IsNotSameConcept<Ts...>)
     [[nodiscard("La valeur de retour d'une commande Get doit toujours etre recupere")]] auto get_components(const Entity entity) noexcept -> std::optional<std::tuple<Ts&...>> {
-        // if (auto opt = internal_get_components<T>(ent)) {
-        //     if constexpr (sizeof...(Ts) > 0) {
-        //         if (auto othOpt = get<Ts...>(ent)) {
-        //             return std::tuple_cat(std::forward_as_tuple(opt.value()), othOpt.value());
-        //         } else {
-        //             return std::nullopt;
-        //         }
-        //     } else {
-        //         return std::forward_as_tuple(opt.value());
-        //     }
-        // }
-        // return std::nullopt;
         return get_components_this_frame<Ts...>(entity);
     }
 
-    [[nodiscard("La valeur de retour d'une commande HasParent doit toujours etre evaluer")]] auto has_parent(const Entity child_entity) const noexcept -> bool {
-        return reg.hasParent(child_entity);
-    }
-
-    [[nodiscard("La valeur de retour d'une commande GetParent doit toujours etre recupere")]] auto get_parent(const Entity child_entity) const noexcept -> std::optional<Entity> {
-        return reg.getParent(child_entity);
-    }
-
-    [[nodiscard("La valeur de retour d'une commande HasChildren doit toujours etre evaluer")]] auto has_children(const Entity parent_entity) const noexcept -> bool {
-        return reg.hasChildren(parent_entity);
-    }
-
-    [[nodiscard("La valeur de retour d'une commande GetChildren doit toujours etre recupere")]] auto get_children(const Entity parent_entity) const noexcept -> std::optional<std::reference_wrapper<const std::unordered_set<Entity>>> {
-        return reg.getChildren(parent_entity);
-    }
-
     constexpr auto append_children(const Entity parent_entity, const std::vector<Entity>& children_entity) noexcept -> Entity {
-        lateUpgrade.appendChildren(parent_entity, children_entity);
+        lateUpgrade.append_children(reg, parent_entity, children_entity);
         return parent_entity;
     }
 
     template <typename... Ts> requires ((sizeof...(Ts) > 0) && (IsResourceConcept<Ts> && ...))
     [[nodiscard("La valeur de retour d'une commande Resource doit toujours etre recupere")]] auto resource() noexcept -> std::tuple<Ts&...> {
         return std::forward_as_tuple(*static_cast<Ts*>(res.get(typeid(Ts).hash_code()).get())...);
-    }
-
-    template <typename... Ts> requires ((sizeof...(Ts) > 0) && (IsResourceConcept<Ts> && ...))
-    [[nodiscard("La valeur de retour d'une commande Resource doit toujours etre recupere")]] auto resource() const noexcept -> std::tuple<Ts&...> {
-        return std::forward_as_tuple(*static_cast<Ts*>(res.get(typeid(Ts).hash_code()).get())...);
-    }
-
-    [[nodiscard]] auto get_destroyed_ents() const noexcept -> const std::unordered_set<Entity>& {
-        return lateUpgrade.delEnts;
-    }
-
-    [[nodiscard]] auto get_added_ents() const noexcept -> const std::unordered_map<Entity, std::unordered_map<Type, std::shared_ptr<IComponent>>>& {
-        return lateUpgrade.addEnts;
-    }
-
-    [[nodiscard]] auto get_added_components() const noexcept -> const std::unordered_map<Entity, std::unordered_map<Type, std::shared_ptr<IComponent>>>& {
-        return lateUpgrade.addComps;
-    }
-
-    [[nodiscard]] auto get_destroyed_components() const noexcept -> const std::unordered_map<Entity, std::unordered_set<Type>>& {
-        return lateUpgrade.delComps;
     }
 
     template <typename... Comps, typename... Filters, typename... Excludes>
@@ -2153,48 +2012,54 @@ public:
         return reg.query<Comps...>({typeid(Comps).hash_code()..., typeid(Filters).hash_code()...}, {typeid(Excludes).hash_code()...});
     }
 
-    template <typename... Comps> requires ((IsComponentConcept<Comps> && ...) && IsNotSameConcept<Comps...>)
-    auto create_entity(Comps&&... comps) noexcept -> Entity {
-        return lateUpgrade.newEnt(
-            reg.getEntToken(),
-            {{typeid(Comps).hash_code(), (std::is_empty_v<Comps> ? nullptr : std::make_shared<Comps>(std::move(comps)))}...}
-        );
+public:
+    template <typename... Components> requires ((IsComponentConcept<Components> && ...) && IsNotSameConcept<Components...>)
+    auto create_entity(Components&&... components) noexcept -> Entity {
+        auto entity_token = reg.get_entity_token();
+        lateUpgrade.create_entity(entity_token);
+        (lateUpgrade.add_components(
+            reg,
+            entity_token,
+            {
+                typeid(Components).hash_code(),
+                std::is_empty_v<Components> ? nullptr : std::make_unique<Components>(std::move(components))
+            },
+            typeid(Components).name()
+        ), ...);
+        return entity_token;
     }
 
-    template <typename... Comps> requires (sizeof...(Comps) > 0 && (IsComponentConcept<Comps> && ...) && IsNotSameConcept<Comps...>)
-    auto add_components(const Entity entity, Comps&&... comps) noexcept -> std::optional<std::tuple<Comps&...>> {
+    template <typename... Components> requires ((IsComponentConcept<Components> && ...) && IsNotSameConcept<Components...>)
+    void add_components(const Entity entity, Components&&... components) noexcept {
         if (is_entity_exists(entity)) {
-            lateUpgrade.add(
+            (lateUpgrade.add_components(
                 reg,
                 entity,
-                {{typeid(Comps).hash_code(), typeid(Comps).name(), (std::is_empty_v<Comps> ? nullptr : std::make_shared<Comps>(std::move(comps)))}...}
-            );
-        } else {
-            (std::println("World::add_component(): Impossible d'ajouter sur une entitée qui n'existe pas [type: {}]", typeid(Comps).name()), ...);
-            return std::nullopt;
+                {
+                    typeid(Components).hash_code(),
+                    std::is_empty_v<Components> ? nullptr : std::make_unique<Components>(std::move(components))
+                },
+                typeid(Components).name()
+            ), ...);
+        } else if (!lateUpgrade.delEnts.contains(entity)) {
+            (std::println("World::add_components(): Impossible d'ajouter sur une entitée qui n'existe pas [Entity: {}], [type: {}]", entity, typeid(Components).name()), ...);
         }
-
-        return std::forward_as_tuple(internal_get_components_this_frame<Comps>(entity).value()...);
     }
 
-    template <typename T, typename... Ts>
+    template <typename... Components> requires ((IsComponentConcept<Components> && ...) && IsNotSameConcept<Components...>)
     void remove_components(const Entity entity) noexcept {
-        if (has_components_this_frame<T>(entity)) {
-            lateUpgrade.remove(entity, typeid(T).hash_code());
-        } else {
-            std::println("World::remove_component(): Impossible de supprimer un composant qui n'existe pas - {}", typeid(T).name());
-        }
-
-        if constexpr (sizeof...(Ts) > 0) {
-            remove_components<Ts...>(entity);
+        if (is_entity_exists(entity)) {
+            lateUpgrade.remove_components(reg, entity, {{typeid(Components).name(), typeid(Components).hash_code()}...});
+        } else if (!lateUpgrade.delEnts.contains(entity)) {
+            (std::println("World::remove_components(): Impossible de supprimer un composant qui n'existe pas - [Entity: {}], [type: {}]", entity, typeid(Components).name()), ...);
         }
     }
 
     void delete_entity(const Entity entity) noexcept {
         if (is_entity_exists(entity)) {
-            lateUpgrade.destroy(entity);
-        } else {
-            std::println("World::delete_entity(): Impossible de supprimer une entitée qui n'existe pas");
+            lateUpgrade.delete_entity(reg, entity);
+        } else if (!lateUpgrade.delEnts.contains(entity)) {
+            std::println("World::delete_entity(): Impossible de supprimer une entitée qui n'existe pas - [Entity: {}]", entity);
         }
     }
 
@@ -2216,16 +2081,12 @@ public:
         return reg.entArch.size();
     }
 
-    [[nodiscard]] constexpr auto get_total_archetypes() const noexcept -> std::size_t {
-        return reg.archs.size();
-    }
-
     void add_dont_destroy_on_load(const Entity ent) noexcept {
         lateUpgrade.add_dont_destroy_on_load(ent);
     }
 
-    void load_scene(std::function<void(SceneSystem, World&)>&& newScene) noexcept {
-        lateUpgrade.load_scene(std::move(newScene));
+    void load_scene(void(*const new_scene)(SceneSystem, World&)) noexcept {
+        lateUpgrade.load_scene(new_scene);
     }
 
     void stop_run(bool val = true) noexcept {
@@ -2233,7 +2094,7 @@ public:
     }
 
     void upgrade() noexcept {
-        lateUpgrade.upgrade(*this, reg);
+        lateUpgrade.upgrade(*this, reg, sys);
     }
 
 private:
@@ -2246,7 +2107,7 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////////
 
-class ZerEngine final {
+class [[nodiscard]] ZerEngine final {
 public:
     ZerEngine() noexcept {
         world.res.emplace(typeid(Time).hash_code(), std::make_unique<Time>(0.02f));
@@ -2365,6 +2226,30 @@ public:
         return *this;
     }
 
+    template <typename Component>
+    [[nodiscard]] auto add_hooks(OnAddComponentHook, std::initializer_list<std::function<void(OnAddComponentHook, World&, const Entity)>>&& callback) noexcept -> ZerEngine& {
+        world.sys.add_on_add_component_hooks(typeid(Component).hash_code(), std::move(callback));
+        return *this;
+    }
+
+    template <typename Component>
+    [[nodiscard]] auto add_hooks(OnCreateEntityHook, std::initializer_list<std::function<void(OnCreateEntityHook, World&, const Entity)>>&& callback) noexcept -> ZerEngine& {
+        world.sys.add_on_create_entity_hooks(typeid(Component).hash_code(), std::move(callback));
+        return *this;
+    }
+
+    template <typename Component>
+    [[nodiscard]] auto add_hooks(OnRemoveComponentHook, std::initializer_list<std::function<void(OnRemoveComponentHook, World&, const Entity)>>&& callback) noexcept -> ZerEngine& {
+        world.sys.add_on_remove_component_hooks(typeid(Component).hash_code(), std::move(callback));
+        return *this;
+    }
+
+    template <typename Component>
+    [[nodiscard]] auto add_hooks(OnDeleteEntityHook, std::initializer_list<std::function<void(OnDeleteEntityHook, World&, const Entity)>>&& callback) noexcept -> ZerEngine& {
+        world.sys.add_on_delete_entity_hooks(typeid(Component).hash_code(), std::move(callback));
+        return *this;
+    }
+
     void run() noexcept {
         world.isRunning = true;
         world.sys.start(world);
@@ -2378,21 +2263,23 @@ public:
             if (time.is_time_step()) {
                 if (time.timeScale != 0) {
                     for (unsigned int i = 0; i < time.get_nb_fixed_steps(); i++) {
+                        world.sys.run_callbacks(world);
                         world.upgrade();
                         world.sys.runFixed(world);
                     }
                 }
                 for (unsigned int i = 0; i < time.get_nb_fixed_steps(); i++) {
+                    world.sys.run_callbacks(world);
                     world.upgrade();
                     world.sys.runUnscaledFixed(world);
                 }
             }
 
-            world.upgrade();
             world.sys.run_callbacks(world);
-
             world.upgrade();
             world.sys.runLate(world);
+
+            world.sys.run_callbacks(world);
             world.upgrade();
         }
     }

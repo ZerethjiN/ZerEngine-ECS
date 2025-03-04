@@ -15,7 +15,7 @@ A simple ECS logic core.
 #include <Zerengine.hpp>
 
 // Ressouces declaration.
-class AppState final: public IResource {
+struct [[nodiscard]] AppState final: public IResource {
 public:
     enum class AppStateType: size_t {
         HOME_SCREEN,
@@ -23,7 +23,7 @@ public:
     };
 
 public:
-    AppState(AppStateType new_cur_app_state):
+    constexpr AppState(AppStateType new_cur_app_state) noexcept:
         cur_app_state(new_cur_app_state) {
     }
 
@@ -32,9 +32,9 @@ public:
 };
 
 // Components declaration.
-class Position final: public IComponent {
+struct [[nodiscard]] Position final: public IComponent {
 public:
-    Position(float new_x, float new_y):
+    constexpr Position(float new_x, float new_y) noexcept:
         x(new_x),
         y(new_y) {
     }
@@ -44,9 +44,9 @@ private:
     float y;
 };
 
-class Velocity final: public IComponent {
+struct [[nodiscard]] Velocity final: public IComponent {
 public:
-    Velocity(float new_x, float new_y):
+    constexpr Velocity(float new_x, float new_y) noexcept:
         x(new_x),
         y(new_y) {
     }
@@ -56,18 +56,18 @@ private:
     float y;
 };
 
-class Player final: public IComponent {};
+struct [[nodiscard]] Player final: public IComponent {};
 
-class PlayerDash final: public IComponent {
+struct [[nodiscard]] PlayerDash final: public IComponent {
 public:
-    PlayerDash(float new_cooldown, float new_dash_speed):
+    constexpr PlayerDash(float new_cooldown, float new_dash_speed) noexcept:
         cooldown(new_cooldown),
         cur_time(0),
         dash_speed(new_dash_speed) {
     }
 
 public:
-    auto can_stop_dash(float delta) -> bool {
+    [[nodiscard]] constexpr auto can_stop_dash(float delta) noexcept -> bool {
         cur_time += delta;
         return cur_time >= cooldown;
     }
@@ -79,7 +79,7 @@ private:
 };
 
 // Initialization system executed only once at startup.
-auto init_pos(StartSystem, World& world) -> void {
+constexpr void init_pos(StartSystem, World& world) noexcept {
     world.create_entity(
         Player(),
         Position(
@@ -107,7 +107,7 @@ auto init_pos(StartSystem, World& world) -> void {
 }
 
 // Systems executed on each frame.
-auto move_pos_sys(ThreadedFixedSystem, World& world) -> void {
+constexpr void move_pos_sys(ThreadedFixedSystem, World& world) noexcept {
     auto positions = world.query<Position, const Velocity>();
 
     auto [time] = world.resource<const Time>();
@@ -118,7 +118,7 @@ auto move_pos_sys(ThreadedFixedSystem, World& world) -> void {
     }
 }
 
-auto player_action_sys(ThreadedSystem, World& world) -> void {
+constexpr void player_action_sys(ThreadedSystem, World& world) noexcept {
     auto players = world.query(with<Player>, without<PlayerDash>);
 
     for (auto [player_ent]: players) {
@@ -133,7 +133,7 @@ auto player_action_sys(ThreadedSystem, World& world) -> void {
     }
 }
 
-auto player_dash_sys(ThreadedSystem, World& world) -> void {
+constexpr void player_dash_sys(ThreadedSystem, World& world) noexcept {
     auto players = world.query<PlayerDash, Velocity>();
 
     auto [time] = world.resource<const Time>();
@@ -148,7 +148,7 @@ auto player_dash_sys(ThreadedSystem, World& world) -> void {
     }
 }
 
-auto stop_run_sys(MainSystem, World& world) -> void {
+constexpr void stop_run_sys(MainSystem, World& world) noexcept {
     world.stop_run();
 }
 
