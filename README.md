@@ -121,9 +121,9 @@ constexpr void move_pos_sys(ThreadedFixedSystem, World& world) noexcept {
 constexpr void player_action_sys(ThreadedSystem, World& world) noexcept {
     auto players = world.query(with<Player>, without<PlayerDash>);
 
-    for (auto [player_ent]: players) {
+    for (auto [player_entity]: players) {
         if (/*Dash Button Pressed*/) {
-            world.add_components(player_ent,
+            world.add_components(player_entity,
                 PlayerDash(
                     /*cooldown:*/ 0.5f,
                     /*dash_speed:*/ 8.0f
@@ -138,9 +138,9 @@ constexpr void player_dash_sys(ThreadedSystem, World& world) noexcept {
 
     auto [time] = world.resource<const Time>();
 
-    for (auto [player_ent, player_dash, velocity]: players) {
+    for (auto [player_entity, player_dash, velocity]: players) {
         if (playerDash.can_stop_dash(time.deltaTime())) {
-            world.remove_components<PlayerDash>(playerEnt);
+            world.remove_components<PlayerDash>(player_entity);
             velocity.x = 0;
         } else {
             velocity.x += playerDash.dash_speed;
