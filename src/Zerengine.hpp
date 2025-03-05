@@ -27,7 +27,7 @@
 
 constexpr inline std::size_t ZERENGINE_VERSION_MAJOR = 25;
 constexpr inline std::size_t ZERENGINE_VERSION_MINOR = 3;
-constexpr inline std::size_t ZERENGINE_VERSION_PATCH = 0;
+constexpr inline std::size_t ZERENGINE_VERSION_PATCH = 1;
 
 using Entity = std::size_t;
 using Type = std::size_t;
@@ -100,11 +100,11 @@ public:
         children_entities(new_children_entities) {
     }
 
-    [[nodiscard]] constexpr std::unordered_set<Entity>::const_iterator begin() const noexcept {
+    [[nodiscard]] constexpr auto begin() const noexcept -> std::unordered_set<Entity>::const_iterator {
         return children_entities.begin();
     }
 
-    [[nodiscard]] constexpr std::unordered_set<Entity>::const_iterator end() const noexcept {
+    [[nodiscard]] constexpr auto end() const noexcept -> std::unordered_set<Entity>::const_iterator {
         return children_entities.end();
     }
 
@@ -1249,7 +1249,7 @@ private:
         tasks.emplace_back(newTasks);
     }
 
-    void addFixedTasks(const std::vector<std::function<void(ThreadedFixedSystem, World&)>>& newTasks) noexcept {
+    void addFixedTasks(const std::vector<void(*)(ThreadedFixedSystem, World&)>& newTasks) noexcept {
         fixedTasks.emplace_back(newTasks);
     }
 
@@ -1408,7 +1408,7 @@ private:
 private:
     World& world;
     std::vector<std::vector<std::function<void(ThreadedSystem, World&)>>> tasks;
-    std::vector<std::vector<std::function<void(ThreadedFixedSystem, World&)>>> fixedTasks;
+    std::vector<std::vector<void(*)(ThreadedFixedSystem, World&)>> fixedTasks;
     std::vector<std::vector<std::function<void(ThreadedUnscaledFixedSystem, World&)>>> unscaledFixedTasks;
     std::mutex mtx;
     std::size_t nbTasksDone {0};
@@ -1572,7 +1572,7 @@ private:
         }
     }
 
-    void runThreadedFixedSetRec(World& world, const ThreadedFixedSet& set, std::vector<std::function<void(ThreadedFixedSystem, World&)>>& setTasks) noexcept {
+    void runThreadedFixedSetRec(World& world, const ThreadedFixedSet& set) noexcept {
         if (set.condition == nullptr || set.condition(world)) {
             if (!set.tasks.empty()) {
                 if (!isUseMultithreading) {
@@ -1580,11 +1580,11 @@ private:
                         func(threaded_fixed_system, world);
                     }
                 } else {
-                    setTasks.insert(setTasks.end(), set.tasks.begin(), set.tasks.end());
+                    threadpool.addFixedTasks(set.tasks);
                 }
             }
-            for (const auto& subSet: set.subSets) { // std::unordered_map<> on_create_entity_hooks;
-                runThreadedFixedSetRec(world, subSet, setTasks);
+            for (const auto& subSet: set.subSets) {
+                runThreadedFixedSetRec(world, subSet);
             }
         }
     }
@@ -1599,11 +1599,7 @@ private:
         }
 
         for (const auto& subSet: threadedFixedSystems) {
-            std::vector<std::function<void(ThreadedFixedSystem, World&)>> setTasks;
-            runThreadedFixedSetRec(world, subSet, setTasks);
-            if (isUseMultithreading && !setTasks.empty()) {
-                threadpool.addFixedTasks(setTasks);
-            }
+            runThreadedFixedSetRec(world, subSet);
         }
 
         if (isUseMultithreading) {
