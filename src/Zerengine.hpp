@@ -27,7 +27,7 @@
 
 constexpr inline std::size_t ZERENGINE_VERSION_MAJOR = 25;
 constexpr inline std::size_t ZERENGINE_VERSION_MINOR = 3;
-constexpr inline std::size_t ZERENGINE_VERSION_PATCH = 1;
+constexpr inline std::size_t ZERENGINE_VERSION_PATCH = 2;
 
 using Entity = std::size_t;
 using Type = std::size_t;
@@ -50,7 +50,7 @@ protected:
     constexpr IComponent() noexcept = default;
 
 public:
-    constexpr ~IComponent() noexcept = default;
+    constexpr virtual ~IComponent() noexcept = default;
 };
 
 class [[nodiscard]] WithCascadingInsert {
@@ -58,7 +58,7 @@ protected:
     constexpr WithCascadingInsert() noexcept = default;
 
 public:
-    constexpr ~WithCascadingInsert() noexcept = default;
+    constexpr virtual ~WithCascadingInsert() noexcept = default;
 };
 
 class [[nodiscard]] WithCascadingRemove {
@@ -66,7 +66,7 @@ protected:
     constexpr WithCascadingRemove() noexcept = default;
 
 public:
-    constexpr ~WithCascadingRemove() noexcept = default;
+    constexpr virtual ~WithCascadingRemove() noexcept = default;
 };
 
 enum class CascadeMode: uint8_t {
@@ -96,15 +96,15 @@ private:
 struct [[nodiscard]] Children final: public IComponent {
 friend class Registry;
 public:
-    constexpr Children(const std::unordered_set<Entity>& new_children_entities) noexcept:
+    Children(const std::unordered_set<Entity>& new_children_entities) noexcept:
         children_entities(new_children_entities) {
     }
 
-    [[nodiscard]] constexpr auto begin() const noexcept -> std::unordered_set<Entity>::const_iterator {
+    [[nodiscard]] auto begin() const noexcept -> std::unordered_set<Entity>::const_iterator {
         return children_entities.begin();
     }
 
-    [[nodiscard]] constexpr auto end() const noexcept -> std::unordered_set<Entity>::const_iterator {
+    [[nodiscard]] auto end() const noexcept -> std::unordered_set<Entity>::const_iterator {
         return children_entities.end();
     }
 
@@ -123,17 +123,11 @@ public:
 struct [[nodiscard]] StartSystem final {};
 constexpr inline const StartSystem start_system;
 struct [[nodiscard]] MainSystem final {};
-constexpr inline const MainSystem main_system;
 struct [[nodiscard]] MainFixedSystem final {};
-constexpr inline const MainFixedSystem main_fixed_system;
 struct [[nodiscard]] MainUnscaledFixedSystem final {};
-constexpr inline const MainUnscaledFixedSystem main_unscaled_fixed_system;
 struct [[nodiscard]] ThreadedSystem final {};
-constexpr inline const ThreadedSystem threaded_system;
 struct [[nodiscard]] ThreadedFixedSystem final {};
-constexpr inline const ThreadedFixedSystem threaded_fixed_system;
 struct [[nodiscard]] ThreadedUnscaledFixedSystem final {};
-constexpr inline const ThreadedUnscaledFixedSystem threaded_unscaled_fixed_system;
 struct [[nodiscard]] LateSystem final {};
 constexpr inline const LateSystem late_system;
 struct [[nodiscard]] LateFixedSystem final {};
@@ -171,8 +165,8 @@ concept IsNotSameConcept = [] -> bool {
 }();
 
 template <typename T>
-concept IsNotEmptyConcept = [] -> bool {
-    static_assert(!std::is_empty_v<T>, "Impossible de requeter un Marker (objet de taille 0)");
+concept IsNotEmptyConcept = [] -> bool { // std::is_empty_v<T>
+    static_assert((sizeof(T) > sizeof(IComponent)), "Impossible de requeter un Marker (objet de taille 0)");
     return true;
 }();
 
@@ -187,7 +181,7 @@ concept IsComponentConcept = [] -> bool {
     static_assert(std::is_class_v<T>, "Impossible d'ajouter un Composant qui ne soit pas une Classe/Struct");
     static_assert(std::derived_from<T, IComponent>, "Impossible d'ajouter un Composant qui n'implemente pas IComponent");
     static_assert(std::is_final_v<T>, "Impossible d'ajouter un Composant qui ne soit pas Final");
-    static_assert(std::copy_constructible<T>, "Impossible d'ajouter un Composant qui ne soit pas Copiable");
+    static_assert(std::move_constructible<T>, "Impossible d'ajouter un Composant qui ne soit pas Moveable");
     return true;
 }();
 
@@ -196,7 +190,7 @@ concept IsResourceConcept = [] -> bool {
     static_assert(std::is_class_v<T>, "Impossible d'ajouter une Ressource qui ne soit pas une Classe");
     static_assert(std::derived_from<T, IResource>, "Impossible d'ajouter une Ressource qui n'implemente pas IResource");
     static_assert(std::is_final_v<T>, "Impossible d'ajouter une Ressource qui ne soit pas Final");
-    static_assert(std::copy_constructible<T>, "Impossible d'ajouter une Ressource qui ne soit pas Copiable");
+    static_assert(std::move_constructible<T>, "Impossible d'ajouter une Ressource qui ne soit pas Moveable");
     return true;
 }();
 
@@ -267,20 +261,24 @@ public:
     }
 
     Archetype(const std::shared_ptr<Archetype>& old_archetype, const Type new_type) noexcept:
-        types(std::move(generate_pools(old_archetype, new_type))),
+        types(std::move([](const std::shared_ptr<Archetype>& old_archetype, const Type new_type) {
+            auto new_types = old_archetype->types;
+            new_types.emplace(new_type);
+            return new_types;
+        } (old_archetype, new_type))),
         previous_archetype(old_archetype) {
         nb_archetypes++;
+        auto old_archetype_rec = old_archetype;
+        old_archetype->future_types.emplace(new_type);
+        while (!old_archetype_rec->previous_archetype.expired()) {
+            auto old_previous_archetype = old_archetype_rec->previous_archetype.lock();
+            old_previous_archetype->future_types.emplace(new_type);
+            old_archetype_rec = old_previous_archetype;
+        }
     }
 
     ~Archetype() {
         nb_archetypes--;
-    }
-
-private:
-    [[nodiscard]] static auto generate_pools(const std::shared_ptr<Archetype>& old_archetype, const Type new_type) noexcept -> std::set<Type> {
-        auto new_types = old_archetype->types;
-        new_types.emplace(new_type);
-        return new_types;
     }
 
 private:
@@ -315,8 +313,9 @@ private:
 public:
     static inline std::size_t nb_archetypes = 0;
     const std::set<Type> types;
+    std::unordered_set<Type> future_types;
     std::unordered_map<Entity, std::unordered_map<Type, std::unique_ptr<IComponent>>> entity_components;
-    std::weak_ptr<Archetype> previous_archetype;
+    const std::weak_ptr<Archetype> previous_archetype;
     std::map<Type, std::shared_ptr<Archetype>> next_archetypes;
 };
 
@@ -446,7 +445,7 @@ public:
         archetype_root->emplace_entity(entity);
     }
 
-    constexpr void add_components(const Entity entity, std::pair<Type, std::unique_ptr<IComponent>>&& new_component) noexcept {
+    void add_components(const Entity entity, std::pair<Type, std::unique_ptr<IComponent>>&& new_component) noexcept {
         auto entArchIt = entArch.find(entity);
         if (entArchIt == entArch.end()) {
             std::cerr << "Registry::add_components(): Impossible d'ajouter un composant sur une entite inexistante: Entity[" << entity << "]" << std::endl;
@@ -481,7 +480,7 @@ public:
         graph_readjustement(old_archetype);
     }
 
-    constexpr void remove_components(const Entity entity, const std::vector<Type>& new_types) noexcept {
+    void remove_components(const Entity entity, const std::vector<Type>& new_types) noexcept {
         auto entArchIt = entArch.find(entity);
         if (entArchIt == entArch.end()) {
             std::cerr << "Registry::remove_components(): Impossible de supprimer un composant sur une entite inexistante: Entity[" << entity << "]" << std::endl;
@@ -548,7 +547,7 @@ public:
         return true;
     }
 
-    [[nodiscard]] constexpr auto get(const Entity entity, const Type type) noexcept -> std::optional<std::reference_wrapper<std::unique_ptr<IComponent>>> {
+    [[nodiscard]] auto get(const Entity entity, const Type type) noexcept -> std::optional<std::reference_wrapper<std::unique_ptr<IComponent>>> {
         if (auto entArchIt = entArch.find(entity); entArchIt != entArch.end()) {
             if (auto entity_components_it = entArchIt->second->entity_components.find(entity); entity_components_it != entArchIt->second->entity_components.end()) {
                 if (auto components_it = entity_components_it->second.find(type); components_it != entity_components_it->second.end()) {
@@ -563,16 +562,17 @@ public:
         return entArch.at(entity)->types;
     }
 
-    void clear_without(const std::unordered_set<Entity>& without_entities) noexcept {
+    [[nodiscard]] auto clear_without(const std::unordered_set<Entity>& without_entities) noexcept -> std::vector<Entity> {
         std::vector<Entity> remove_entities;
         for (const auto entity: std::views::keys(entArch)) {
             if (!without_entities.contains(entity)) {
                 remove_entities.emplace_back(entity);
             }
         }
-        for (const auto entity: remove_entities) {
-            delete_entity(entity);
-        }
+        // for (const auto entity: remove_entities) {
+        //     delete_entity(entity);
+        // }
+        return remove_entities;
     }
 
 public:
@@ -709,7 +709,13 @@ private:
     }
 
 private:
-    constexpr void query_rec(const std::map<Type, bool>& ordered_types, const std::size_t nb_types, const std::size_t current_nb_types, std::map<Type, bool>::iterator current_type_it, const std::shared_ptr<Archetype>& current_archetype, const Type filter, std::unordered_set<std::shared_ptr<Archetype>>& internal_archetypes) const noexcept {
+    void query_rec(const std::map<Type, bool>& ordered_types, const std::size_t nb_types, const std::size_t current_nb_types, std::map<Type, bool>::iterator current_type_it, const std::shared_ptr<Archetype>& current_archetype, const Type filter, std::unordered_set<std::shared_ptr<Archetype>>& internal_archetypes) const noexcept {
+        if (current_type_it != ordered_types.end() && !current_type_it->second) {
+            if (!current_archetype->future_types.contains(current_type_it->first)) {
+                return;
+            }
+        }
+
         for (const auto& [next_type, next_archetype]: current_archetype->next_archetypes) {
             if (next_type < filter) {
                 continue;
@@ -753,30 +759,32 @@ private:
     }
 
 private:
-    constexpr void create_branch(const std::set<Type>& ordered_types, const Entity entity) noexcept {
+    void create_branch(const std::set<Type>& ordered_types, const Entity entity) noexcept {
         auto current_archetype = archetype_root;
-        for (const auto type: ordered_types) {
-            if (auto next_archetypes_it = current_archetype->next_archetypes.find(type); next_archetypes_it != current_archetype->next_archetypes.end()) {
+        for (auto ordered_types_it = ordered_types.begin(); ordered_types_it != ordered_types.end(); ordered_types_it++) {
+            if (auto next_archetypes_it = current_archetype->next_archetypes.find(*ordered_types_it); next_archetypes_it != current_archetype->next_archetypes.end()) {
                 current_archetype = next_archetypes_it->second;
             } else {
-                current_archetype = current_archetype->next_archetypes.emplace(
-                    type,
-                    std::make_shared<Archetype>(current_archetype, type)
-                ).first->second;
+                for (; ordered_types_it != ordered_types.end(); ordered_types_it++) {
+                    current_archetype = current_archetype->next_archetypes.emplace(
+                        *ordered_types_it,
+                        std::make_shared<Archetype>(current_archetype, *ordered_types_it)
+                    ).first->second;
+                }
+                break;
             }
         }
         entArch.at(entity) = current_archetype;
     }
 
-    constexpr void graph_readjustement(const std::shared_ptr<Archetype>& old_archetype) noexcept {
+    void graph_readjustement(const std::shared_ptr<Archetype>& old_archetype) noexcept {
         auto remove_old_rec = old_archetype;
         while (!remove_old_rec->previous_archetype.expired() && remove_old_rec->entity_components.empty() && remove_old_rec->next_archetypes.empty()) {
-            remove_old_rec
-                ->previous_archetype.lock()
-                ->next_archetypes.erase(
-                    *std::prev(remove_old_rec->types.end())
-                );
-            remove_old_rec = remove_old_rec->previous_archetype.lock();
+            auto old_previous_archetype = remove_old_rec->previous_archetype.lock();
+            old_previous_archetype->next_archetypes.erase(
+                *std::prev(remove_old_rec->types.end())
+            );
+            remove_old_rec = old_previous_archetype;
         }
     }
 
@@ -1074,12 +1082,57 @@ private:
         scene_messages.emplace_back(new_scene);
     }
 
-    void load_scene_internal(World& world, Registry& registry, void(*const new_scene)(SceneSystem, World&)) noexcept {
+    void load_scene_internal(World& world, Registry& registry, Sys& sys, void(*const new_scene)(SceneSystem, World&)) noexcept {
         std::unordered_set<Entity> dont_destroy_entities;
         for (auto [dont_destroy_entity]: registry.query({typeid(DontDestroyOnLoad).hash_code()}, {})) {
             dont_destroy_entities.emplace(dont_destroy_entity);
         }
-        registry.clear_without(dont_destroy_entities);
+        for (const auto entity: registry.clear_without(dont_destroy_entities)) {
+            delete_entity(registry, entity);
+        }
+        for (auto&& [callback, entity, components, component_types, children_entities, message_type]: registry_messages) {
+            switch (message_type) {
+                case RegistryMessageType::REMOVE_COMPONENT:
+                    for (const auto remove_component_type: delComps.at(entity)) {
+                        upgrade_hook_remove_component(world, sys, entity, remove_component_type);
+                    }
+                    break;
+                case RegistryMessageType::DELETE_ENTITY:
+                    for (const auto type: delComps.at(entity)) {
+                        upgrade_hook_remove_component(world, sys, entity, type);
+                        upgrade_hook_delete_entity_with_component(world, sys, entity, type);
+                    }
+                    break;
+                default: break;
+            }
+
+            callback(registry, entity, std::move(components), component_types, children_entities);
+
+            switch (message_type) {
+                case RegistryMessageType::ADD_COMPONENT:
+                    if (add_entities.contains(entity)) {
+                        for (const auto [add_component_type, _]: addComps.at(entity)) {
+                            upgrade_hook_create_entity_with_component(world, sys, entity, add_component_type);
+                        }
+                    } else {
+                        for (const auto [add_component_type, _]: addComps.at(entity)) {
+                            upgrade_hook_add_component(world, sys, entity, add_component_type);
+                        }
+                    }
+                    break;
+                default: break;
+            }
+        }
+        add_entities.clear();
+        addComps.clear();
+        delComps.clear();
+        delEnts.clear();
+        addParentChildren.clear();
+        setInactiveEnts.clear();
+        setActiveEnts.clear();
+        addDontDestroyOnLoadEnts.clear();
+
+        registry_messages.clear();
         new_scene({}, world);
     }
 
@@ -1131,17 +1184,17 @@ private:
         registry_messages.clear();
 
         for (const auto& new_scene: scene_messages) {
-            load_scene_internal(world, registry, new_scene);
+            load_scene_internal(world, registry, sys, new_scene);
         }
 
         scene_messages.clear();
     }
 
     // Co-dependency: see after class Sys final;
-    constexpr void upgrade_hook_add_component(World&, Sys&, const Entity, const Type) noexcept;
-    constexpr void upgrade_hook_create_entity_with_component(World&, Sys&, const Entity, const Type) noexcept;
-    constexpr void upgrade_hook_remove_component(World&, Sys&, const Entity, const Type) noexcept;
-    constexpr void upgrade_hook_delete_entity_with_component(World&, Sys&, const Entity, const Type) noexcept;
+    void upgrade_hook_add_component(World&, Sys&, const Entity, const Type) noexcept;
+    void upgrade_hook_create_entity_with_component(World&, Sys&, const Entity, const Type) noexcept;
+    void upgrade_hook_remove_component(World&, Sys&, const Entity, const Type) noexcept;
+    void upgrade_hook_delete_entity_with_component(World&, Sys&, const Entity, const Type) noexcept;
 
 private:
     std::mutex mtx;
@@ -1187,28 +1240,61 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////////
 
-class ThreadedFixedSet final {
+struct [[nodiscard]] ThreadedSet final {
 friend class Sys;
 public:
-    [[nodiscard]] constexpr ThreadedFixedSet(std::initializer_list<ThreadedFixedSet>&& new_sub_sets) noexcept:
+    constexpr ThreadedSet(std::initializer_list<ThreadedSet>&& new_sub_sets) noexcept:
         condition(nullptr),
         tasks(),
         subSets(std::move(new_sub_sets)) {
     }
 
-    [[nodiscard]] constexpr ThreadedFixedSet(bool(*const new_condtion)(World&), std::initializer_list<ThreadedFixedSet>&& new_sub_sets) noexcept:
+    constexpr ThreadedSet(bool(*const new_condtion)(World&), std::initializer_list<ThreadedSet>&& new_sub_sets) noexcept:
         condition(new_condtion),
         tasks(),
         subSets(std::move(new_sub_sets)) {
     }
 
-    [[nodiscard]] constexpr ThreadedFixedSet(std::initializer_list<void(*)(ThreadedFixedSystem, World&)>&& new_tasks, std::initializer_list<ThreadedFixedSet>&& new_sub_sets = {}) noexcept:
+    constexpr ThreadedSet(std::initializer_list<void(*)(ThreadedSystem, World&)>&& new_tasks, std::initializer_list<ThreadedSet>&& new_sub_sets = {}) noexcept:
         condition(nullptr),
         tasks(std::move(new_tasks)),
         subSets(std::move(new_sub_sets)) {
     }
 
-    [[nodiscard]] constexpr ThreadedFixedSet(bool(*const new_condtion)(World&), std::initializer_list<void(*)(ThreadedFixedSystem, World&)>&& new_tasks, std::initializer_list<ThreadedFixedSet>&& new_sub_sets = {}) noexcept:
+    constexpr ThreadedSet(bool(*const new_condtion)(World&), std::initializer_list<void(*)(ThreadedSystem, World&)>&& new_tasks, std::initializer_list<ThreadedSet>&& new_sub_sets = {}) noexcept:
+        condition(new_condtion),
+        tasks(std::move(new_tasks)),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+private:
+    bool(*const condition)(World&);
+    const std::vector<void(*)(ThreadedSystem, World&)> tasks;
+    const std::vector<ThreadedSet> subSets;
+};
+
+struct [[nodiscard]] ThreadedFixedSet final {
+friend class Sys;
+public:
+    constexpr ThreadedFixedSet(std::initializer_list<ThreadedFixedSet>&& new_sub_sets) noexcept:
+        condition(nullptr),
+        tasks(),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr ThreadedFixedSet(bool(*const new_condtion)(World&), std::initializer_list<ThreadedFixedSet>&& new_sub_sets) noexcept:
+        condition(new_condtion),
+        tasks(),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr ThreadedFixedSet(std::initializer_list<void(*)(ThreadedFixedSystem, World&)>&& new_tasks, std::initializer_list<ThreadedFixedSet>&& new_sub_sets = {}) noexcept:
+        condition(nullptr),
+        tasks(std::move(new_tasks)),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr ThreadedFixedSet(bool(*const new_condtion)(World&), std::initializer_list<void(*)(ThreadedFixedSystem, World&)>&& new_tasks, std::initializer_list<ThreadedFixedSet>&& new_sub_sets = {}) noexcept:
         condition(new_condtion),
         tasks(std::move(new_tasks)),
         subSets(std::move(new_sub_sets)) {
@@ -1218,6 +1304,138 @@ private:
     bool(*const condition)(World&);
     const std::vector<void(*)(ThreadedFixedSystem, World&)> tasks;
     const std::vector<ThreadedFixedSet> subSets;
+};
+
+struct [[nodiscard]] ThreadedUnscaledFixedSet final {
+friend class Sys;
+public:
+    constexpr ThreadedUnscaledFixedSet(std::initializer_list<ThreadedUnscaledFixedSet>&& new_sub_sets) noexcept:
+        condition(nullptr),
+        tasks(),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr ThreadedUnscaledFixedSet(bool(*const new_condtion)(World&), std::initializer_list<ThreadedUnscaledFixedSet>&& new_sub_sets) noexcept:
+        condition(new_condtion),
+        tasks(),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr ThreadedUnscaledFixedSet(std::initializer_list<void(*)(ThreadedUnscaledFixedSystem, World&)>&& new_tasks, std::initializer_list<ThreadedUnscaledFixedSet>&& new_sub_sets = {}) noexcept:
+        condition(nullptr),
+        tasks(std::move(new_tasks)),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr ThreadedUnscaledFixedSet(bool(*const new_condtion)(World&), std::initializer_list<void(*)(ThreadedUnscaledFixedSystem, World&)>&& new_tasks, std::initializer_list<ThreadedUnscaledFixedSet>&& new_sub_sets = {}) noexcept:
+        condition(new_condtion),
+        tasks(std::move(new_tasks)),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+private:
+    bool(*const condition)(World&);
+    const std::vector<void(*)(ThreadedUnscaledFixedSystem, World&)> tasks;
+    const std::vector<ThreadedUnscaledFixedSet> subSets;
+};
+
+struct [[nodiscard]] MainSet final {
+friend class Sys;
+public:
+    constexpr MainSet(std::initializer_list<MainSet>&& new_sub_sets) noexcept:
+        condition(nullptr),
+        tasks(),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr MainSet(bool(*const new_condtion)(World&), std::initializer_list<MainSet>&& new_sub_sets) noexcept:
+        condition(new_condtion),
+        tasks(),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr MainSet(std::initializer_list<void(*)(MainSystem, World&)>&& new_tasks, std::initializer_list<MainSet>&& new_sub_sets = {}) noexcept:
+        condition(nullptr),
+        tasks(std::move(new_tasks)),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr MainSet(bool(*const new_condtion)(World&), std::initializer_list<void(*)(MainSystem, World&)>&& new_tasks, std::initializer_list<MainSet>&& new_sub_sets = {}) noexcept:
+        condition(new_condtion),
+        tasks(std::move(new_tasks)),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+private:
+    bool(*const condition)(World&);
+    const std::vector<void(*)(MainSystem, World&)> tasks;
+    const std::vector<MainSet> subSets;
+};
+
+struct [[nodiscard]] MainFixedSet final {
+friend class Sys;
+public:
+    constexpr MainFixedSet(std::initializer_list<MainFixedSet>&& new_sub_sets) noexcept:
+        condition(nullptr),
+        tasks(),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr MainFixedSet(bool(*const new_condtion)(World&), std::initializer_list<MainFixedSet>&& new_sub_sets) noexcept:
+        condition(new_condtion),
+        tasks(),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr MainFixedSet(std::initializer_list<void(*)(MainFixedSystem, World&)>&& new_tasks, std::initializer_list<MainFixedSet>&& new_sub_sets = {}) noexcept:
+        condition(nullptr),
+        tasks(std::move(new_tasks)),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr MainFixedSet(bool(*const new_condtion)(World&), std::initializer_list<void(*)(MainFixedSystem, World&)>&& new_tasks, std::initializer_list<MainFixedSet>&& new_sub_sets = {}) noexcept:
+        condition(new_condtion),
+        tasks(std::move(new_tasks)),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+private:
+    bool(*const condition)(World&);
+    const std::vector<void(*)(MainFixedSystem, World&)> tasks;
+    const std::vector<MainFixedSet> subSets;
+};
+
+struct [[nodiscard]] MainUnscaledFixedSet final {
+friend class Sys;
+public:
+    constexpr MainUnscaledFixedSet(std::initializer_list<MainUnscaledFixedSet>&& new_sub_sets) noexcept:
+        condition(nullptr),
+        tasks(),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr MainUnscaledFixedSet(bool(*const new_condtion)(World&), std::initializer_list<MainUnscaledFixedSet>&& new_sub_sets) noexcept:
+        condition(new_condtion),
+        tasks(),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr MainUnscaledFixedSet(std::initializer_list<void(*)(MainUnscaledFixedSystem, World&)>&& new_tasks, std::initializer_list<MainUnscaledFixedSet>&& new_sub_sets = {}) noexcept:
+        condition(nullptr),
+        tasks(std::move(new_tasks)),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+    constexpr MainUnscaledFixedSet(bool(*const new_condtion)(World&), std::initializer_list<void(*)(MainUnscaledFixedSystem, World&)>&& new_tasks, std::initializer_list<MainUnscaledFixedSet>&& new_sub_sets = {}) noexcept:
+        condition(new_condtion),
+        tasks(std::move(new_tasks)),
+        subSets(std::move(new_sub_sets)) {
+    }
+
+private:
+    bool(*const condition)(World&);
+    const std::vector<void(*)(MainUnscaledFixedSystem, World&)> tasks;
+    const std::vector<MainUnscaledFixedSet> subSets;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -1245,7 +1463,7 @@ private:
         }
     }
 
-    void addTasks(const std::vector<std::function<void(ThreadedSystem, World&)>>& newTasks) noexcept {
+    void addTasks(const std::vector<void(*)(ThreadedSystem, World&)>& newTasks) noexcept {
         tasks.emplace_back(newTasks);
     }
 
@@ -1253,7 +1471,7 @@ private:
         fixedTasks.emplace_back(newTasks);
     }
 
-    void addUnscaledFixedTasks(const std::vector<std::function<void(ThreadedUnscaledFixedSystem, World&)>>& newTasks) noexcept {
+    void addUnscaledFixedTasks(const std::vector<void(*)(ThreadedUnscaledFixedSystem, World&)>& newTasks) noexcept {
         unscaledFixedTasks.emplace_back(newTasks);
     }
 
@@ -1407,9 +1625,9 @@ private:
 
 private:
     World& world;
-    std::vector<std::vector<std::function<void(ThreadedSystem, World&)>>> tasks;
+    std::vector<std::vector<void(*)(ThreadedSystem, World&)>> tasks;
     std::vector<std::vector<void(*)(ThreadedFixedSystem, World&)>> fixedTasks;
-    std::vector<std::vector<std::function<void(ThreadedUnscaledFixedSystem, World&)>>> unscaledFixedTasks;
+    std::vector<std::vector<void(*)(ThreadedUnscaledFixedSystem, World&)>> unscaledFixedTasks;
     std::mutex mtx;
     std::size_t nbTasksDone {0};
     std::condition_variable cvTask;
@@ -1441,28 +1659,28 @@ private:
         startSystems.emplace_back(std::move(func));
     }
 
-    constexpr void addMainCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainSystem, World&)>>&& funcs) noexcept {
-        mainSystems.emplace_back(std::move(cond), std::move(funcs));
+    constexpr void add_threaded_set_condition_system(const ThreadedSet& new_set) noexcept {
+        threaded_set_systems.emplace_back(new_set);
     }
 
-    constexpr void addMainFixedCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainFixedSystem, World&)>>&& funcs) noexcept {
-        mainFixedSystems.emplace_back(std::move(cond), std::move(funcs));
+    constexpr void addThreadedFixedCondSys(const ThreadedFixedSet& new_set) noexcept {
+        threadedFixedSystems.emplace_back(new_set);
     }
 
-    constexpr void addMainUnscaledFixedCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainUnscaledFixedSystem, World&)>>&& funcs) noexcept {
-        mainUnscaledFixedSystems.emplace_back(std::move(cond), std::move(funcs));
+    constexpr void add_threaded_unscaled_fixed_condition_system(const ThreadedUnscaledFixedSet& new_set) noexcept {
+        threaded_unscaled_fixed_set_systems.emplace_back(new_set);
     }
 
-    constexpr void addThreadedCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(ThreadedSystem, World&)>>&& funcs) noexcept {
-        threadedSystems.emplace_back(std::move(cond), std::move(funcs));
+    constexpr void add_main_set_cond_sys(const MainSet& new_set) noexcept {
+        main_set_systems.emplace_back(new_set);
     }
 
-    constexpr void addThreadedFixedCondSys(const ThreadedFixedSet& newSet) noexcept {
-        threadedFixedSystems.emplace_back(newSet);
+    constexpr void add_main_fixed_set_condition_system(const MainFixedSet& new_set) noexcept {
+        main_fixed_set_systems.emplace_back(new_set);
     }
 
-    constexpr void addThreadedUnscaledFixedCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(ThreadedUnscaledFixedSystem, World&)>>&& funcs) noexcept {
-        threadedUnscaledFixedSystems.emplace_back(std::move(cond), std::move(funcs));
+    constexpr void add_main_unscaled_fixed_set_condition_system(const MainUnscaledFixedSet& new_set) noexcept {
+        main_unscaled_fixed_set_systems.emplace_back(new_set);
     }
 
     constexpr void addLateCondSys(std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(LateSystem, World&)>>&& funcs) noexcept {
@@ -1477,7 +1695,8 @@ private:
         lateUnscaledFixedSystems.emplace_back(std::move(cond), std::move(funcs));
     }
 
-    constexpr void add_callback_system(void(*const callback)(CallbackSystem, World&, const Entity), const Entity entity) noexcept {
+    void add_callback_system(void(*const callback)(CallbackSystem, World&, const Entity), const Entity entity) noexcept {
+        std::unique_lock<std::mutex> lock(mtx);
         callback_systems.emplace_back(callback, entity);
     }
 
@@ -1535,25 +1754,43 @@ private:
         }
     }
 
-    void run(World& world) noexcept {
-        for (const auto& mainFunc: mainSystems) {
-            if (mainFunc.first == nullptr || mainFunc.first(world)) {
-                for (const auto& mainRow: mainFunc.second) {
-                    mainRow(main_system, world);
+    void run_main_set_rec(World& world, const MainSet& set) noexcept {
+        if (set.condition == nullptr || set.condition(world)) {
+            if (!set.tasks.empty()) {
+                for (const auto& function: set.tasks) {
+                    function({}, world);
                 }
+            }
+            for (const auto& sub_set: set.subSets) {
+                run_main_set_rec(world, sub_set);
             }
         }
+    }
 
-        for (const auto& funcs: threadedSystems) {
-            if (funcs.first == nullptr || funcs.first(world)) {
+    void run_threaded_set_rec(World& world, const ThreadedSet& set) noexcept {
+        if (set.condition == nullptr || set.condition(world)) {
+            if (!set.tasks.empty()) {
                 if (!isUseMultithreading) {
-                    for (auto& func: funcs.second) {
-                        func(threaded_system, world);
+                    for (const auto& function: set.tasks) {
+                        function({}, world);
                     }
                 } else {
-                    threadpool.addTasks(funcs.second);
+                    threadpool.addTasks(set.tasks);
                 }
             }
+            for (const auto& sub_set: set.subSets) {
+                run_threaded_set_rec(world, sub_set);
+            }
+        }
+    }
+
+    void run(World& world) noexcept {
+        for (const auto& sub_set: main_set_systems) {
+            run_main_set_rec(world, sub_set);
+        }
+
+        for (const auto& subSet: threaded_set_systems) {
+            run_threaded_set_rec(world, subSet);
         }
 
         if (isUseMultithreading) {
@@ -1572,12 +1809,25 @@ private:
         }
     }
 
+    void run_main_fixed_set_rec(World& world, const MainFixedSet& set) noexcept {
+        if (set.condition == nullptr || set.condition(world)) {
+            if (!set.tasks.empty()) {
+                for (const auto& function: set.tasks) {
+                    function({}, world);
+                }
+            }
+            for (const auto& sub_set: set.subSets) {
+                run_main_fixed_set_rec(world, sub_set);
+            }
+        }
+    }
+
     void runThreadedFixedSetRec(World& world, const ThreadedFixedSet& set) noexcept {
         if (set.condition == nullptr || set.condition(world)) {
             if (!set.tasks.empty()) {
                 if (!isUseMultithreading) {
                     for (auto& func: set.tasks) {
-                        func(threaded_fixed_system, world);
+                        func({}, world);
                     }
                 } else {
                     threadpool.addFixedTasks(set.tasks);
@@ -1590,12 +1840,8 @@ private:
     }
 
     void runFixed(World& world) noexcept {
-        for (const auto& [condition, systems]: mainFixedSystems) {
-            if (condition == nullptr || condition(world)) {
-                for (const auto& system: systems) {
-                    system(main_fixed_system, world);
-                }
-            }
+        for (const auto& sub_set: main_fixed_set_systems) {
+            run_main_fixed_set_rec(world, sub_set);
         }
 
         for (const auto& subSet: threadedFixedSystems) {
@@ -1616,25 +1862,43 @@ private:
         }
     }
 
-    void runUnscaledFixed(World& world) noexcept {
-        for (const auto& mainFunc: mainUnscaledFixedSystems) {
-            if (mainFunc.first == nullptr || mainFunc.first(world)) {
-                for (const auto& mainRow: mainFunc.second) {
-                    mainRow(main_unscaled_fixed_system, world);
-                }
-            }
-        }
-
-        for (const auto& funcs: threadedUnscaledFixedSystems) {
-            if (funcs.first == nullptr || funcs.first(world)) {
+    void runThreadedUnscaledFixedSetRec(World& world, const ThreadedUnscaledFixedSet& set) noexcept {
+        if (set.condition == nullptr || set.condition(world)) {
+            if (!set.tasks.empty()) {
                 if (!isUseMultithreading) {
-                    for (auto& func: funcs.second) {
-                        func(threaded_unscaled_fixed_system, world);
+                    for (auto& func: set.tasks) {
+                        func({}, world);
                     }
                 } else {
-                    threadpool.addUnscaledFixedTasks(funcs.second);
+                    threadpool.addUnscaledFixedTasks(set.tasks);
                 }
             }
+            for (const auto& subSet: set.subSets) {
+                runThreadedUnscaledFixedSetRec(world, subSet);
+            }
+        }
+    }
+
+    void run_main_unscaled_fixed_set_rec(World& world, const MainUnscaledFixedSet& set) noexcept {
+        if (set.condition == nullptr || set.condition(world)) {
+            if (!set.tasks.empty()) {
+                for (const auto& function: set.tasks) {
+                    function({}, world);
+                }
+            }
+            for (const auto& sub_set: set.subSets) {
+                run_main_unscaled_fixed_set_rec(world, sub_set);
+            }
+        }
+    }
+
+    void runUnscaledFixed(World& world) noexcept {
+        for (const auto& subSet: main_unscaled_fixed_set_systems) {
+            run_main_unscaled_fixed_set_rec(world, subSet);
+        }
+
+        for (const auto& subSet: threaded_unscaled_fixed_set_systems) {
+            runThreadedUnscaledFixedSetRec(world, subSet);
         }
 
         if (isUseMultithreading) {
@@ -1660,12 +1924,12 @@ private:
 
 private:
     std::vector<std::function<void(StartSystem, World&)>> startSystems;
-    std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(MainSystem, World&)>>>> mainSystems;
-    std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(MainFixedSystem, World&)>>>> mainFixedSystems;
-    std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(MainUnscaledFixedSystem, World&)>>>> mainUnscaledFixedSystems;
-    std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(ThreadedSystem, World&)>>>> threadedSystems;
+    std::vector<ThreadedSet> threaded_set_systems;
     std::vector<ThreadedFixedSet> threadedFixedSystems;
-    std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(ThreadedUnscaledFixedSystem, World&)>>>> threadedUnscaledFixedSystems;
+    std::vector<ThreadedUnscaledFixedSet> threaded_unscaled_fixed_set_systems;
+    std::vector<MainSet> main_set_systems;
+    std::vector<MainFixedSet> main_fixed_set_systems;
+    std::vector<MainUnscaledFixedSet> main_unscaled_fixed_set_systems;
     std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(LateSystem, World&)>>>> lateSystems;
     std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(LateFixedSystem, World&)>>>> lateFixedSystems;
     std::vector<std::pair<std::function<bool(World&)>, std::vector<std::function<void(LateUnscaledFixedSystem, World&)>>>> lateUnscaledFixedSystems;
@@ -1680,9 +1944,10 @@ public:
 private:
     ThreadPool threadpool;
     bool isUseMultithreading {true};
+    std::mutex mtx;
 };
 
-constexpr void LateUpgrade::upgrade_hook_add_component(World& world, Sys& sys, const Entity entity, const Type type) noexcept {
+void LateUpgrade::upgrade_hook_add_component(World& world, Sys& sys, const Entity entity, const Type type) noexcept {
     if (auto hooks_it = sys.on_add_component_hooks.find(type); hooks_it != sys.on_add_component_hooks.end()) {
         for (const auto& callback: hooks_it->second) {
             callback({}, world, entity);
@@ -1690,7 +1955,7 @@ constexpr void LateUpgrade::upgrade_hook_add_component(World& world, Sys& sys, c
     }
 }
 
-constexpr void LateUpgrade::upgrade_hook_create_entity_with_component(World& world, Sys& sys, const Entity entity, const Type type) noexcept {
+void LateUpgrade::upgrade_hook_create_entity_with_component(World& world, Sys& sys, const Entity entity, const Type type) noexcept {
     if (auto hooks_it = sys.on_create_entity_hooks.find(type); hooks_it != sys.on_create_entity_hooks.end()) {
         for (const auto& callback: hooks_it->second) {
             callback({}, world, entity);
@@ -1698,7 +1963,7 @@ constexpr void LateUpgrade::upgrade_hook_create_entity_with_component(World& wor
     }
 }
 
-constexpr void LateUpgrade::upgrade_hook_remove_component(World& world, Sys& sys, const Entity entity, const Type type) noexcept {
+void LateUpgrade::upgrade_hook_remove_component(World& world, Sys& sys, const Entity entity, const Type type) noexcept {
     if (auto hooks_it = sys.on_remove_component_hooks.find(type); hooks_it != sys.on_remove_component_hooks.end()) {
         for (const auto& callback: hooks_it->second) {
             callback({}, world, entity);
@@ -1706,7 +1971,7 @@ constexpr void LateUpgrade::upgrade_hook_remove_component(World& world, Sys& sys
     }
 }
 
-constexpr void LateUpgrade::upgrade_hook_delete_entity_with_component(World& world, Sys& sys, const Entity entity, const Type type) noexcept {
+void LateUpgrade::upgrade_hook_delete_entity_with_component(World& world, Sys& sys, const Entity entity, const Type type) noexcept {
     if (auto hooks_it = sys.on_delete_entity_hooks.find(type); hooks_it != sys.on_delete_entity_hooks.end()) {
         for (const auto& callback: hooks_it->second) {
             callback({}, world, entity);
@@ -2137,58 +2402,33 @@ public:
         return *this;
     }
 
-    [[nodiscard]] auto add_systems(MainSystem, std::initializer_list<std::function<void(MainSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
-        world.sys.addMainCondSys(nullptr, std::move(funcs));
+    [[nodiscard]] auto add_systems(const ThreadedSet& new_set) noexcept -> ZerEngine& {
+        world.sys.add_threaded_set_condition_system(new_set);
         return *this;
     }
 
-    [[nodiscard]] auto add_systems(MainSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
-        world.sys.addMainCondSys(std::move(cond), std::move(funcs));
+    [[nodiscard]] auto add_systems(const ThreadedFixedSet& new_set) noexcept -> ZerEngine& {
+        world.sys.addThreadedFixedCondSys(new_set);
         return *this;
     }
 
-    [[nodiscard]] auto add_systems(MainFixedSystem, std::initializer_list<std::function<void(MainFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
-        world.sys.addMainFixedCondSys(nullptr, std::move(funcs));
+    [[nodiscard]] auto add_systems(const ThreadedUnscaledFixedSet& new_set) noexcept -> ZerEngine& {
+        world.sys.add_threaded_unscaled_fixed_condition_system(new_set);
         return *this;
     }
 
-    [[nodiscard]] auto add_systems(MainFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
-        world.sys.addMainFixedCondSys(std::move(cond), std::move(funcs));
+    [[nodiscard]] auto add_systems(const MainSet& new_set) noexcept -> ZerEngine& {
+        world.sys.add_main_set_cond_sys(new_set);
         return *this;
     }
 
-    [[nodiscard]] auto add_systems(MainUnscaledFixedSystem, std::initializer_list<std::function<void(MainUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
-        world.sys.addMainUnscaledFixedCondSys(nullptr, std::move(funcs));
+    [[nodiscard]] auto add_systems(const MainFixedSet& new_set) noexcept -> ZerEngine& {
+        world.sys.add_main_fixed_set_condition_system(new_set);
         return *this;
     }
 
-    [[nodiscard]] auto add_systems(MainUnscaledFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(MainUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
-        world.sys.addMainUnscaledFixedCondSys(std::move(cond), std::move(funcs));
-        return *this;
-    }
-
-    [[nodiscard]] auto add_systems(ThreadedSystem, std::initializer_list<std::function<void(ThreadedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
-        world.sys.addThreadedCondSys(nullptr, std::move(funcs));
-        return *this;
-    }
-
-    [[nodiscard]] auto add_systems(ThreadedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(ThreadedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
-        world.sys.addThreadedCondSys(std::move(cond), std::move(funcs));
-        return *this;
-    }
-
-    [[nodiscard]] auto add_systems(const ThreadedFixedSet& newSet) noexcept -> ZerEngine& {
-        world.sys.addThreadedFixedCondSys(newSet);
-        return *this;
-    }
-
-    [[nodiscard]] auto add_systems(ThreadedUnscaledFixedSystem, std::initializer_list<std::function<void(ThreadedUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
-        world.sys.addThreadedUnscaledFixedCondSys(nullptr, std::move(funcs));
-        return *this;
-    }
-
-    [[nodiscard]] auto add_systems(ThreadedUnscaledFixedSystem, std::function<bool(World&)>&& cond, std::initializer_list<std::function<void(ThreadedUnscaledFixedSystem, World&)>>&& funcs) noexcept -> ZerEngine& {
-        world.sys.addThreadedUnscaledFixedCondSys(std::move(cond), std::move(funcs));
+    [[nodiscard]] auto add_systems(const MainUnscaledFixedSet& new_set) noexcept -> ZerEngine& {
+        world.sys.add_main_unscaled_fixed_set_condition_system(new_set);
         return *this;
     }
 

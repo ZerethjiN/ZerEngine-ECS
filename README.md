@@ -4,9 +4,8 @@
 A simple ECS logic core.
 
 * /!\ C++23 Minimum /!\
-* Cache Friendly Component managed by Archetypal.
+* Component managed by Archetypal.
 * Dynamic resource added by user and easy to access.
-* Simple implementation of components without inheritance.
 * Application easy to build and run.
 * Multi Threading on systems.
 
@@ -15,13 +14,12 @@ A simple ECS logic core.
 #include <Zerengine.hpp>
 
 // Ressouces declaration.
-struct [[nodiscard]] AppState final: public IResource {
-public:
-    enum class AppStateType: size_t {
-        HOME_SCREEN,
-        IN_GAME
-    };
+enum class AppStateType: size_t {
+    HOME_SCREEN,
+    IN_GAME
+};
 
+struct [[nodiscard]] AppState final: public IResource {
 public:
     constexpr AppState(AppStateType new_cur_app_state) noexcept:
         cur_app_state(new_cur_app_state) {
@@ -60,21 +58,19 @@ struct [[nodiscard]] Player final: public IComponent {};
 
 struct [[nodiscard]] PlayerDash final: public IComponent {
 public:
-    constexpr PlayerDash(float new_cooldown, float new_dash_speed) noexcept:
+    constexpr PlayerDash(const float new_cooldown, const float new_dash_speed) noexcept:
         cooldown(new_cooldown),
-        cur_time(0),
         dash_speed(new_dash_speed) {
     }
 
 public:
-    [[nodiscard]] constexpr auto can_stop_dash(float delta) noexcept -> bool {
-        cur_time += delta;
-        return cur_time >= cooldown;
+    [[nodiscard]] constexpr auto can_stop_dash(const float delta) noexcept -> bool {
+        cooldown -= delta;
+        return cooldown <= 0;
     }
 
 private:
     float cooldown;
-    float cur_time;
     float dash_speed;
 };
 
@@ -152,33 +148,37 @@ constexpr void stop_run_sys(MainSystem, World& world) noexcept {
     world.stop_run();
 }
 
-auto main() -> int {
+auto main() noexcept -> int {
     // Our application.
     ZerEngine()
         .use_multithreading(true) // <== optional
         .set_fixed_time_step(0.02f) // <== Set fixed time step for fixed systems
-        .add_resource<AppState>(AppState::IN_GAME)
+        .add_resource<AppState>(AppStateType::IN_GAME)
         .add_systems(startSystem, init_pos)
-        .add_systems(mainSystem, stop_run_sys)
-        .add_systems(threadedFixedSystems,
+        .add_systems(MainSet(
+            {
+                stop_run_sys
+            }
+        ))
+        .add_systems(ThreadedSet(
             {
                 player_action_sys, player_dash_sys
             }
-        ) // Systems work at the same time
-        .add_systems(threadedFixedSystem,
+        )) // Systems work at the same time
+        .add_systems(ThreadedFixedSet(
             {
                 move_pos_sys
             }
-        ) // <== Systems work at fixed time
-        .add_systems(threadedFixedSystem,
+        )) // <== Systems work at fixed time
+        .add_systems(ThreadedFixedSet(
             [](World& world) -> bool {
                 auto [app_state] = world.resource<const AppState>();
-                return app_state == AppState::IN_GAME;
+                return app_state == AppStateType::IN_GAME;
             },
             {
                 /** This Systems only runs if condition is true **/
             }
-        )
+        ))
         .add_systems(lateSystem,
             {
                 /*...*/
